@@ -1,0 +1,209 @@
+/* Covalent · design tokens and base styles (the contract is DESIGN.md in the app root). */
+
+:root {
+  --paper: #faf9f6;
+  --field: #f5f6f7;
+  --ink: #20242a;
+  --ink-2: #3a4049;
+  --muted: #626a73;
+  --quiet: #68737f;
+  --line: #dfe1e4;
+  --line-strong: #b9bfc6;
+  /* Boundaries that identify a control need 3:1 (WCAG 1.4.11). */
+  --field-line: #777f89;
+  --cobalt: #315cd5;
+  --copper: #a7702c;
+  --focus: var(--cobalt);
+  --error: #b42336;
+
+  --font-display: "Exposure", "Exposure Fallback", Georgia, "Times New Roman", serif;
+  --font-sans: "Instrument Sans", "Instrument Sans Fallback", Arial, "Helvetica Neue", sans-serif;
+
+  --max: 1728px;
+  --gutter: clamp(20px, 4.8vw, 96px);
+  --header-h: 88px;
+  --section: clamp(72px, 9vw, 128px);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --hover: 180ms;
+
+  color-scheme: light;
+}
+
+@media (max-width: 720px) {
+  :root { --header-h: 72px; }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-h) + 16px);
+}
+
+/* data-instant: motion is paused (src/scripts/explore.ts). */
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-instant]) { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+p,
+dd {
+  text-wrap: pretty;
+}
+
+:where(a, button, input, summary):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Takes focus from the skip link and from a click on blank page. It is not a control. */
+main:focus {
+  outline: none;
+}
+
+::selection {
+  background: #dbe3f7;
+  color: var(--ink);
+}
+
+.wrap {
+  width: min(var(--max), 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 20;
+  padding: 10px 16px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* ---------- type ---------- */
+
+.kicker {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  font-size: clamp(38px, 1.6rem + 3vw, 66px);
+  line-height: 1.03;
+  text-wrap: balance;
+}
+.display em {
+  font-style: normal;
+  color: var(--quiet);
+}
+
+/* ---------- buttons ---------- */
+
+.button {
+  --button-h: 52px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-height: var(--button-h);
+  padding: 0 22px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+    transition: background-color var(--hover) ease, border-color var(--hover) ease, transform var(--hover) ease;
+}
+.button:hover {
+  background: var(--cobalt);
+  border-color: var(--cobalt);
+}
+.button:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

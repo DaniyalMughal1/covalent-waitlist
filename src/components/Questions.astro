@@ -1,0 +1,128 @@
+---
+// Three open rows. Native details, so they work with no JavaScript and find-in-page can
+// reach the answers. The first starts open so the rows read as text, not as a menu.
+import { faqs } from "../config/site";
+---
+
+<section class="questions" id="questions" aria-label="Frequently asked questions">
+  <div class="faq-list">
+    {
+      faqs.map((item, index) => (
+        <details class="faq" open={index === 0}>
+          <summary class="faq-question">
+            <span class="faq-text">{item.q}</span>
+            <svg class="faq-plus" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M10 2.5v15M2.5 10h15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </summary>
+          <p class="faq-answer">{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .questions {
+    width: min(var(--max), 100%);
+    margin-inline: auto;
+    padding: var(--section) var(--gutter);
+    /* A full-bleed boundary lands on the header, not on the gap headings get. */
+    scroll-margin-top: -16px;
+  }
+  .faq-list {
+    max-width: 760px;
+    margin-inline: auto;
+    border-top: 1px solid var(--line-strong);
+  }
+  .faq {
+    border-bottom: 1px solid var(--line-strong);
+    transition: border-color var(--hover) ease;
+  }
+
+  .faq-question {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    min-height: 56px;
+    /* Eight pixels outside the column on each side, so the text stays on it and the focus
+       ring has room around the words and the icon. */
+    margin-inline: -8px;
+    padding: 24px 8px;
+    font-family: var(--font-display);
+    font-size: clamp(25px, 1.1rem + 0.9vw, 32px);
+    font-variation-settings: "EXPO" -4;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    cursor: pointer;
+    list-style: none;
+  }
+  .faq-question::-webkit-details-marker {
+    display: none;
+  }
+  .faq-question:focus-visible {
+    outline-offset: -2px;
+  }
+  .faq-text {
+    text-wrap: balance;
+  }
+  .faq-plus {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    color: var(--quiet);
+    transition: transform 320ms var(--ease-out), color var(--hover) ease;
+  }
+  .faq[open] .faq-plus {
+    transform: rotate(45deg);
+  }
+  @media (hover: hover) {
+    .faq:hover {
+      border-bottom-color: var(--ink);
+    }
+    .faq-question:hover .faq-plus {
+      color: var(--ink);
+    }
+  }
+
+  .faq-answer {
+    max-width: 58ch;
+    padding: 0 44px 30px 0;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  /* Where the browser can interpolate to auto, the row grows into place. Elsewhere it
+     simply opens, which is the same result with no in-between. */
+  @supports (interpolate-size: allow-keywords) and selector(::details-content) {
+    .faq {
+      interpolate-size: allow-keywords;
+    }
+    .faq::details-content {
+      block-size: 0;
+      overflow-y: clip;
+      transition: block-size 320ms var(--ease-in-out), content-visibility 320ms allow-discrete;
+    }
+    .faq[open]::details-content {
+      block-size: auto;
+    }
+    [data-instant] .faq::details-content {
+      transition: none;
+    }
+  }
+  [data-instant] .faq-plus {
+    transition: none;
+  }
+
+  @media (max-width: 720px) {
+    .faq-question {
+      padding-block: 18px;
+    }
+    .faq-answer {
+      padding-right: 0;
+      padding-bottom: 24px;
+    }
+  }
+</style>

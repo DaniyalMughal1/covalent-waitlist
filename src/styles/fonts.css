@@ -1,0 +1,55 @@
+/*
+ * Covalent web fonts. Provenance and licence status live in docs/ASSET-PROVENANCE.md.
+ *
+ * Exposure is display type for this private study. It is the unmodified file from the
+ * art-direction pack and is NOT cleared for public release: see that file before
+ * deploying. Swapping it is one token, --font-display in global.css.
+ *
+ * Fallback metric overrides are computed with fontTools from the shipped fonts and the
+ * macOS copies of Georgia and Arial, so the swap barely moves the layout:
+ *   avg               = advance width of a-z + space, weighted by English letter frequency
+ *   size-adjust       = avg(web font) / avg(fallback)
+ *   ascent-override   = hhea.ascender    / (unitsPerEm * size-adjust)
+ *   descent-override  = |hhea.descender| / (unitsPerEm * size-adjust)
+ *
+ * Exposure -> Georgia: avg 0.4752 em vs 0.4403 em -> 107.91%.
+ *   upm 4096, ascender 3892, descender -1024, lineGap 0.
+ * Instrument Sans -> Arial: avg 0.4545 em vs 0.4425 em -> 102.72%.
+ *   upm 1000, ascender 970, descender -250, lineGap 0.
+ */
+
+@font-face {
+  font-family: 'Exposure';
+  src: url('/fonts/Exposure-VAR.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-var.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+2010-2027, U+2030-203A, U+20AC,
+    U+2122, U+2190-2193, U+21BA, U+2713;
+}
+
+@font-face {
+  font-family: 'Exposure Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 107.91%;
+  ascent-override: 88.05%;
+  descent-override: 23.17%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Instrument Sans Fallback';
+  src: local('Arial'), local('Helvetica Neue');
+  size-adjust: 102.72%;
+  ascent-override: 94.43%;
+  descent-override: 24.34%;
+  line-gap-override: 0%;
+}

@@ -1,0 +1,27 @@
+---
+// The Covalent mark as a flat, single-colour SVG (header, demo, favicon-sized uses).
+// Geometry lives in src/lib/mark.ts and is a study until the approved vector arrives.
+import { BONDS, BOND_STROKE, OUTLINE_PATH, OUTLINE_STROKE, VIEWBOX_ATTR } from "../lib/mark";
+
+interface Props {
+  class?: string;
+  title?: string;
+}
+
+const { class: className, title } = Astro.props;
+---
+
+<svg
+  class:list={["mark", className]}
+  viewBox={VIEWBOX_ATTR}
+  preserveAspectRatio="xMidYMid meet"
+  role={title ? "img" : undefined}
+  aria-label={title}
+  aria-hidden={title ? undefined : "true"}
+  focusable="false"
+>
+  <path d={OUTLINE_PATH} fill="none" stroke="currentColor" stroke-width={OUTLINE_STROKE} stroke-linejoin="round" />
+  <g class="mark-bonds" fill="none" stroke="currentColor" stroke-width={BOND_STROKE} stroke-linecap="round">
+    {BONDS.map((d) => <path d={d} />)}
+  </g>
+</svg>

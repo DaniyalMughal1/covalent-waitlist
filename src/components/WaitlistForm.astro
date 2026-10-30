@@ -1,0 +1,339 @@
+---
+// One waitlist form. Every instance posts to the same endpoint with the same
+// validation and response handling (src/scripts/waitlist.ts). Without JavaScript it
+// still submits natively and the server redirects to a result page.
+//
+// The fields and the success note share one grid cell, and messages share one reserved
+// row, so a response never changes the form's height and nothing around it moves.
+import { CHECK_PATH, OUTLINE_PATH, VIEWBOX_ATTR } from "../lib/mark";
+import { copy, site } from "../config/site";
+import Mark from "./Mark.astro";
+
+interface Props {
+  id: string;
+  source: "hero" | "final";
+  label: string;
+  class?: string;
+}
+
+const { id, source, label, class: className } = Astro.props;
+const email = `${id}-email`;
+const error = `${id}-error`;
+const note = `${id}-note`;
+---
+
+<form
+  class:list={["waitlist", className]}
+  id={id}
+  action="/api/waitlist"
+  method="post"
+  data-waitlist
+  data-state="idle"
+>
+  <div class="form-body">
+    <label class="field-label" for={email}>{label}</label>
+    <div class="field-line">
+      <input
+        id={email}
+        class="field-input"
+        name="email"
+        type="email"
+        autocomplete="email"
+        inputmode="email"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder={copy.placeholder}
+        required
+        maxlength="254"
+        aria-describedby={`${error} ${note}`}
+      />
+      <input type="hidden" name="source" value={source} />
+      <button class="submit" type="submit">
+        <span class="visually-hidden submit-label">{copy.action}</span>
+        <span class="visually-hidden submit-busy">{copy.busy}</span>
+        <svg class="submit-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M5.5 14.5 14.5 5.5M7 5.5h7.5V13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <Mark class="submit-mark" />
+      </button>
+    </div>
+    <div class="form-messages">
+      <p class="form-note" id={note}>
+        {copy.support}
+        {site.privacyUrl && <a class="note-link" href={site.privacyUrl}>Privacy</a>}
+      </p>
+      <p class="field-error" id={error} role="alert" data-error></p>
+      <p class="form-status" role="status" data-status></p>
+    </div>
+  </div>
+  <div class="form-success" data-success>
+    <svg class="success-mark" viewBox={VIEWBOX_ATTR} aria-hidden="true" focusable="false">
+      <path d={OUTLINE_PATH} fill="none" stroke="currentColor" stroke-width="15" stroke-linejoin="round" />
+      <path class="success-check" d={CHECK_PATH} fill="none" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" pathLength="1" />
+    </svg>
+    <p class="success-text" tabindex="-1" data-success-text></p>
+  </div>
+</form>
+
+<style>
+  .waitlist {
+    display: grid;
+    width: 100%;
+    max-width: 380px;
+  }
+  .form-body,
+  .form-success {
+    grid-area: 1 / 1;
+    min-width: 0;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--ink);
+  }
+
+  /* An open field: one rule and a round action, no box. */
+  .field-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 64px;
+    border-bottom: 1px solid var(--field-line);
+    transition: border-color var(--hover) ease, box-shadow var(--hover) ease;
+  }
+  .field-line:hover {
+    border-color: var(--ink);
+  }
+
+  .field-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 18px;
+    line-height: 1.2;
+    color: var(--ink);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .field-input::placeholder {
+    color: #697079;
+    opacity: 1;
+  }
+  /* Autofill keeps the open field instead of painting a tinted box behind it. */
+  .field-input:-webkit-autofill {
+    -webkit-text-fill-color: var(--ink);
+    transition: background-color 600000s 0s;
+  }
+
+  @supports selector(:has(*)) {
+    .field-input:focus-visible {
+      outline: none;
+    }
+    .field-line:has(.field-input:focus-visible) {
+      border-color: var(--cobalt);
+      box-shadow: 0 1px 0 var(--cobalt);
+    }
+    .waitlist:has(.field-input:focus-visible) .field-label {
+      color: var(--cobalt);
+    }
+  }
+
+  .submit {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    transition: background-color var(--hover) ease, transform var(--hover) ease;
+  }
+  .submit:hover {
+    background: var(--cobalt);
+  }
+  .submit:active {
+    transform: scale(0.95);
+  }
+  .submit:focus-visible {
+    border-radius: 50%;
+  }
+  .submit-arrow,
+  .submit :global(.submit-mark) {
+    grid-area: 1 / 1;
+    transition: opacity var(--hover) ease, transform 320ms var(--ease-out);
+  }
+  .submit-arrow {
+    width: 22px;
+    height: 22px;
+  }
+  .submit:hover .submit-arrow {
+    transform: rotate(45deg);
+  }
+  .submit :global(.submit-mark) {
+    width: 26px;
+    height: auto;
+    opacity: 0;
+  }
+  /* Hidden labels drop out of the accessible name, so it always matches the state. */
+  .submit-busy {
+    visibility: hidden;
+  }
+
+  .form-messages {
+    display: grid;
+    min-height: calc(2 * 1.45em + 12px);
+    padding-top: 12px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .form-messages > * {
+    grid-area: 1 / 1;
+  }
+
+  .form-note {
+    color: var(--muted);
+  }
+  .note-link {
+    margin-left: 6px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--line-strong);
+  }
+
+  /* Messages. Their regions always exist (empty), so assistive tech hears updates. */
+  .field-error,
+  .form-status {
+    display: flex;
+    gap: 8px;
+    font-weight: 500;
+    color: var(--error);
+  }
+  .waitlist[data-state="submitting"] .form-status {
+    color: var(--ink);
+  }
+  .field-error:not(:empty)::before,
+  .waitlist[data-state="failed"] .form-status:not(:empty)::before {
+    content: "!";
+    content: "!" / "";
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: var(--error);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .form-success {
+    display: flex;
+    align-items: flex-start;
+    align-self: start;
+    gap: 14px;
+    padding-block: 14px;
+    border-block: 1px solid var(--line-strong);
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.45;
+    visibility: hidden;
+  }
+  .success-mark {
+    flex: none;
+    width: 30px;
+    height: auto;
+    margin-top: 1px;
+    color: var(--ink);
+  }
+  .success-check {
+    stroke: var(--cobalt);
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+  /* Focus lands here so screen readers announce the result. It is not a control, and
+     the message itself shows where the visitor is. */
+  .success-text:focus {
+    outline: none;
+  }
+
+  /* ---------- states ---------- */
+
+  .waitlist:is([data-state="invalid"], [data-state="failed"], [data-state="submitting"]) .form-note {
+    visibility: hidden;
+  }
+
+  .waitlist[data-state="invalid"] .field-line {
+    border-color: var(--error);
+    box-shadow: 0 1px 0 var(--error);
+  }
+
+  .waitlist[data-state="submitting"] .submit-label {
+    visibility: hidden;
+  }
+  .waitlist[data-state="submitting"] .submit-busy {
+    visibility: visible;
+  }
+  .waitlist[data-state="submitting"] .submit {
+    cursor: progress;
+    background: var(--ink);
+  }
+  .waitlist[data-state="submitting"] .submit-arrow {
+    opacity: 0;
+  }
+  .waitlist[data-state="submitting"] .submit :global(.submit-mark) {
+    opacity: 1;
+  }
+  /* The brand's own "working" behaviour: the bonds hop 60° at a time. Two hops land on
+     the same form, so the loop has no seam. */
+  .waitlist[data-state="submitting"] .submit :global(.mark-bonds) {
+    transform-box: view-box;
+    transform-origin: 0 0;
+    animation: bond-hop 960ms var(--ease-in-out) infinite;
+  }
+  @keyframes bond-hop {
+    0%, 30% { transform: rotate(0deg); }
+    50%, 80% { transform: rotate(60deg); }
+    100% { transform: rotate(120deg); }
+  }
+
+  .waitlist:is([data-state="accepted"], [data-state="confirm"]) .form-body {
+    visibility: hidden;
+  }
+  .waitlist:is([data-state="accepted"], [data-state="confirm"]) .form-success {
+    visibility: visible;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .waitlist:is([data-state="accepted"], [data-state="confirm"]) .success-check {
+      animation: draw-check 520ms var(--ease-out) 120ms both;
+    }
+  }
+  @keyframes draw-check {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .field-line {
+      border-bottom-color: CanvasText;
+    }
+    .submit {
+      border: 1px solid ButtonText;
+    }
+  }
+</style>

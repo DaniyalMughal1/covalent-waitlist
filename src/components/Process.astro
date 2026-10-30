@@ -1,0 +1,116 @@
+---
+import Mark from "./Mark.astro";
+import "../styles/coordination.css";
+
+const chapters = [
+  { label: "Context", title: ["Separate agents.", "Shared understanding."], body: "One task. The same decisions, available to every agent.", detail: "Invite links expire after 24 hours." },
+  { label: "Ownership", title: ["Work in parallel.", "Stay out of each other’s way."], body: "Agents claim the code they’re changing. Overlapping claims wait.", detail: "One file. Two agents. Separate regions." },
+  { label: "Handoff", title: ["Pass the work.", "Keep the context."], body: "Changes, decisions and next steps travel with the handoff.", detail: "The endpoint is ready. Connect the form." },
+  { label: "Workspace", title: ["All the moving parts.", "One place."], body: "The task, your agents and the work coming back for review.", detail: "Your team stays in the picture." },
+];
+---
+
+<section id="how-it-works" class="coordination" data-coordination aria-label="How Covalent connects your agents">
+  <div class="coordination-pin" data-coordination-pin>
+    <div class="coordination-heading">
+      <span class="coordination-eyebrow">A little chemistry.</span>
+      <span class="coordination-count" data-chapter-count aria-hidden="true">01 / 04</span>
+    </div>
+    <div class="coordination-copy">
+      {chapters.map((chapter, i) => (
+        <article class="coordination-chapter" data-chapter={i} hidden={i !== 0}>
+          <h2>{chapter.title.map(line => <span>{line}</span>)}</h2>
+          <p>{chapter.body}</p>
+        </article>
+      ))}
+    </div>
+
+    <div class="coordination-visual" data-coordination-visual data-motion-surface>
+      <div class="coordination-molecule" data-molecule aria-hidden="true">
+        <div class="coordination-ground"></div>
+        <svg class="coordination-fallback" data-molecule-fallback viewBox="0 0 900 640" role="presentation">
+          <defs>
+            <linearGradient id="bond-metal" x1="0" y1="0" x2=".6" y2="1">
+              <stop stop-color="#f5f5f2"/><stop offset=".24" stop-color="#c3c8cd"/><stop offset=".4" stop-color="#fff"/><stop offset=".52" stop-color="#333b45"/><stop offset=".73" stop-color="#9ea7af"/><stop offset="1" stop-color="#3a414a"/>
+            </linearGradient>
+            <radialGradient id="atom-metal" cx=".31" cy=".22" r=".84">
+              <stop stop-color="#fff"/><stop offset=".2" stop-color="#e6e8e6"/><stop offset=".35" stop-color="#7d8995"/><stop offset=".48" stop-color="#252c33"/><stop offset=".64" stop-color="#b6bdc3"/><stop offset=".8" stop-color="#343c45"/><stop offset="1" stop-color="#11171e"/>
+            </radialGradient>
+          </defs>
+          <g data-fallback-bonds fill="none" stroke="url(#bond-metal)" stroke-width="17" stroke-linecap="round">
+            <path d="M150 290L280 340L365 270L450 225L535 270L535 370L450 415L365 370L365 270M535 320L630 275L765 340"/>
+          </g>
+          <g fill="url(#atom-metal)">
+            <circle cx="150" cy="290" r="57"/><circle cx="280" cy="340" r="19"/>
+            <circle cx="365" cy="270" r="20"/><circle cx="450" cy="225" r="20"/><circle cx="535" cy="270" r="20"/>
+            <circle cx="535" cy="370" r="20"/><circle cx="450" cy="415" r="20"/><circle cx="365" cy="370" r="20"/>
+            <circle cx="630" cy="275" r="19"/><circle cx="765" cy="340" r="57"/>
+          </g>
+        </svg>
+        <canvas class="coordination-canvas" data-coordination-canvas></canvas>
+        <div class="molecule-label molecule-label--left" data-agent-label="0"><i></i><span>Maya’s agent<small data-agent-status="0">UI & invitations</small></span></div>
+        <div class="molecule-label molecule-label--right" data-agent-label="1"><i></i><span>Theo’s agent<small data-agent-status="1">API & permissions</small></span></div>
+        <div class="molecule-context" data-context-label><Mark/><span data-context-text>One shared task</span></div>
+        <div class="molecule-claim molecule-claim--left" data-claim="0"><span>createInvite()</span><small>Maya · lines 12–38</small></div>
+        <div class="molecule-claim molecule-claim--right" data-claim="1"><span>acceptInvite()</span><small>Theo · lines 52–76</small></div>
+        <div class="molecule-transfer" data-transfer><span class="transfer-dot"></span><span>Endpoint ready <b>↗</b></span></div>
+      </div>
+
+      <div class="workspace-reveal" data-workspace-reveal hidden>
+        <div class="workspace-window" data-workspace-window>
+          <div class="workspace-titlebar"><span class="workspace-brand"><Mark/>covalent</span><span>team-app <span class="workspace-divider">/</span> Team invitations</span><span class="workspace-online"><i></i>2 agents</span></div>
+          <div class="workspace-body">
+            <aside class="workspace-sidebar" aria-label="Demo agents">
+              <span class="workspace-section-label">Workspace</span>
+              <div class="workspace-project"><span>↳</span> team-app</div>
+              <div class="workspace-agent-heading"><span>Agents</span><span>02</span></div>
+              <button class="workspace-agent is-selected" data-demo-agent="maya" aria-label="Maya’s agent" aria-pressed="true"><span class="workspace-avatar">M</span><span>Maya’s agent<small>Invite flow</small></span><i></i></button>
+              <button class="workspace-agent" data-demo-agent="theo" aria-label="Theo’s agent" aria-pressed="false"><span class="workspace-avatar workspace-avatar--theo">T</span><span>Theo’s agent<small>API & permissions</small></span><i></i></button>
+              <div class="workspace-sidebar-bottom"><span class="workspace-avatar">M</span><span>Maya <small>Personal workspace</small></span></div>
+            </aside>
+            <div class="workspace-conversation">
+              <div class="workspace-conversation-head"><span data-demo-agent-title>Maya’s agent</span><span class="workspace-check">Ready for review</span></div>
+              <div class="workspace-thread" data-demo-thread="maya">
+                <div class="workspace-prompt"><span class="workspace-avatar">M</span><p>Add team invites. Links should expire after 24 hours.</p></div>
+                <div class="workspace-response"><Mark/><div><p>I’ve picked up Theo’s endpoint and connected the invite flow.</p><div class="workspace-change"><span>↳</span><div><strong>createInvite()</strong><small>src/invites.ts · lines 12–38</small></div><span class="workspace-change-count">+18</span></div><p class="workspace-message-note">The 24-hour expiry is carried through.</p></div></div>
+                <div class="workspace-handoff"><span>↗</span><div><strong>Handoff from Theo’s agent</strong><p>POST /invites is ready. The response includes <code>expiresAt</code>.</p></div></div>
+              </div>
+              <div class="workspace-thread" data-demo-thread="theo" hidden>
+                <div class="workspace-prompt"><span class="workspace-avatar workspace-avatar--theo">T</span><p>Build the invite endpoint. Keep the shared expiry decision.</p></div>
+                <div class="workspace-response"><Mark/><div><p>The endpoint is ready. Maya has the response shape and the next step.</p><div class="workspace-change"><span>↳</span><div><strong>acceptInvite()</strong><small>src/invites.ts · lines 52–76</small></div><span class="workspace-change-count">+24</span></div><p class="workspace-message-note">My claim is released for the handoff.</p></div></div>
+                <div class="workspace-handoff"><span>↗</span><div><strong>Sent to Maya’s agent</strong><p>Connect the form. Invalid or expired links return a clear error.</p></div></div>
+              </div>
+              <div class="workspace-composer" aria-label="Example command field"><Mark/><span>Give your agent the next step…</span><span class="workspace-composer-plus">＋</span></div>
+            </div>
+            <aside class="workspace-context" aria-label="Demo shared records">
+              <div class="workspace-tabs" role="tablist" aria-label="Shared records">
+                <button id="record-context-tab" role="tab" aria-selected="true" aria-controls="record-context" data-record-tab="context">Context</button>
+                <button id="record-claims-tab" role="tab" aria-selected="false" aria-controls="record-claims" tabindex="-1" data-record-tab="claims">Claims</button>
+                <button id="record-activity-tab" role="tab" aria-selected="false" aria-controls="record-activity" tabindex="-1" data-record-tab="activity">Activity</button>
+              </div>
+              <div class="workspace-record" id="record-context" role="tabpanel" aria-labelledby="record-context-tab" data-record-panel="context">
+                <span class="workspace-section-label">Shared task</span><h3>Team invitations</h3><p>One invite flow, from the API to the interface.</p>
+                <div class="workspace-fact"><span>Decision</span><p>Invite links expire after <strong>24 hours.</strong></p><small>Available to both agents</small></div>
+                <div class="workspace-record-bottom"><span class="record-bond">●—●</span><p>Same project.<br/>Same understanding.</p></div>
+              </div>
+              <div class="workspace-record" id="record-claims" role="tabpanel" aria-labelledby="record-claims-tab" data-record-panel="claims" hidden>
+                <span class="workspace-section-label">Ownership history</span><h3>Room for both.</h3><p>Separate regions in the same file.</p><div class="workspace-owned"><span>Maya’s agent</span><strong>createInvite()</strong><small>Lines 12–38 · released</small></div><div class="workspace-owned"><span>Theo’s agent</span><strong>acceptInvite()</strong><small>Lines 52–76 · released</small></div>
+              </div>
+              <div class="workspace-record" id="record-activity" role="tabpanel" aria-labelledby="record-activity-tab" data-record-panel="activity" hidden>
+                <span class="workspace-section-label">The handoff</span><h3>Nothing lost.</h3><ol class="workspace-activity"><li><i></i><span>Theo shared the endpoint<small>Changes + next step</small></span></li><li><i></i><span>Maya accepted the handoff<small>Context carried forward</small></span></li><li><i></i><span>Invite flow ready for review<small>Back to your team</small></span></li></ol>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="coordination-bottom">
+      <p class="coordination-caption" data-coordination-caption>{chapters[0].detail}</p>
+      <nav class="coordination-rail" aria-label="Demo chapters">
+        {chapters.map((chapter, i) => <button data-chapter-button={i} aria-current={i === 0 ? "step" : undefined}><span class="chapter-number">0{i + 1}</span><span>{chapter.label}</span><i></i></button>)}
+      </nav>
+    </div>
+  </div>
+  <noscript><div class="coordination-nojs">{chapters.slice(1).map(c => <article><h2>{c.title.join(" ")}</h2><p>{c.body}</p></article>)}</div></noscript>
+</section>

@@ -1,0 +1,58 @@
+---
+// Shown after a signup submitted without JavaScript; the server redirects here.
+import Base from "../layouts/Base.astro";
+import Mark from "./Mark.astro";
+
+interface Props {
+  title: string;
+  message: string;
+  retry?: boolean;
+}
+
+const { title, message, retry = false } = Astro.props;
+---
+
+<Base title={`${title} · Covalent`} noindex>
+  <main class="result wrap" id="main">
+    <a class="result-home" href="/" aria-label="Covalent home">
+      <Mark class="result-logo" />
+      <span aria-hidden="true">covalent</span>
+    </a>
+    <h1 class="display">{title}</h1>
+    <p class="result-message">{message}</p>
+    <a class="button" href={retry ? "/#join" : "/"}>{retry ? "Back to the waitlist" : "Back to Covalent"}</a>
+  </main>
+</Base>
+
+<style>
+  .result {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 20px;
+    min-height: 100svh;
+    max-width: 640px;
+    padding-block: 64px;
+  }
+  .result-home {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 400;
+    font-variation-settings: "EXPO" -8;
+    letter-spacing: -0.045em;
+  }
+  .result-home :global(.result-logo) {
+    width: 28px;
+    height: auto;
+  }
+  .result-message {
+    margin-bottom: 12px;
+    font-size: 18px;
+    color: var(--muted);
+  }
+</style>

@@ -1,0 +1,6 @@
+---
+import ResultPage from "../../components/ResultPage.astro";
+import { messages } from "../../config/site";
+---
+
+<ResultPage title="You’re on the list." message={messages.accepted.replace("You’re on the list. ", "")} />

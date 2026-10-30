@@ -1,0 +1,81 @@
+---
+import { Picture } from "astro:assets";
+import art from "../assets/shared-field-footer.png";
+import WaitlistForm from "./WaitlistForm.astro";
+import { copy, site } from "../config/site";
+---
+
+<footer class="poster" id="access">
+  <div class="poster-frame">
+    <div class="poster-art" aria-hidden="true">
+      <Picture src={art} alt="" formats={["avif", "webp"]} fallbackFormat="jpg"
+        widths={[800, 1280, 1672]} sizes="100vw" quality={88} loading="lazy" decoding="async" />
+    </div>
+    <div class="poster-invite">
+      <h2 class="poster-title"><span>{copy.finalHeading[0]}</span><span>{copy.finalHeading[1]}</span></h2>
+      <WaitlistForm id="join-final" source="final" label="Join the Covalent waitlist" class="poster-form" />
+    </div>
+    <p class="poster-wordmark" aria-hidden="true">covalent.</p>
+    <div class="poster-baseline">
+      <p>{copy.footerLine}</p>
+      <nav class="poster-links" aria-label="Footer">
+        {site.privacyUrl && <a href={site.privacyUrl}>Privacy</a>}
+        {site.contactEmail && <a href={`mailto:${site.contactEmail}`}>Contact</a>}
+        <a href="#top">Back to top ↑</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<style>
+  /* These are the approved motion study's composition and Exposure settings. */
+  .poster { position: relative; overflow: hidden; background: #f8f6f1; }
+  .poster-frame { position: relative; height: max(900px, 95svh); isolation: isolate; }
+  .poster-frame::before {
+    content: ""; position: absolute; inset: 0 0 auto; z-index: 1;
+    height: clamp(120px, 14vw, 220px); pointer-events: none;
+    background: linear-gradient(to bottom, var(--paper) 0%, rgba(250,249,246,.85) 25%, rgba(250,249,246,.3) 70%, rgba(250,249,246,0) 100%);
+  }
+  .poster-art { position: absolute; inset: 0; transform: scale(1.01); transform-origin: center bottom; pointer-events: none; }
+  .poster-art :global(picture), .poster-art :global(img) { display: block; width: 100%; height: 100%; }
+  .poster-art :global(img) { object-fit: cover; object-position: center bottom; }
+  .poster-art::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to bottom, #f8f6f1 0%, #f8f6f1 34%, rgba(248,246,241,.94) 43%, rgba(248,246,241,0) 64%),
+      linear-gradient(to top, rgba(8,13,22,.38), transparent 35%);
+  }
+  .poster-invite { position: relative; z-index: 2; margin-left: 8vw; padding-top: 65px; }
+  .poster-title { font-family: var(--font-display); font-weight: 400; font-variation-settings: normal;
+    font-size: clamp(58px, 6vw, 96px); line-height: .97; letter-spacing: -.04em; margin: 0 0 28px; }
+  .poster-title span { display: block; }
+  .poster-invite :global(.poster-form) { width: 340px; max-width: calc(100vw - 16vw); }
+  .poster-invite :global(.field-label) { font-size: 12px; font-weight: 400; line-height: normal; margin-bottom: 8px; }
+  .poster-invite :global(.field-line) { min-height: 55px; gap: 8px; }
+  .poster-invite :global(.field-input) { height: 54px; font-size: 17px; }
+  .poster-invite :global(.submit) { width: 44px; height: 44px; }
+  .poster-invite :global(.form-messages) { font-size: 11px; line-height: 1.5; padding-top: 12px; }
+  .poster-wordmark { position: absolute; left: 3.2vw; right: 3.2vw; bottom: 90px; z-index: 2;
+    font-family: var(--font-display); font-weight: 400; font-variation-settings: normal;
+    font-size: 24.1vw; line-height: .76; letter-spacing: -.065em; color: #f6f5f0;
+    white-space: nowrap; pointer-events: none; user-select: none; }
+  .poster-baseline { position: absolute; bottom: 28px; left: 4.8vw; right: 4.8vw; z-index: 2;
+    display: flex; align-items: center; gap: 20px; justify-content: space-between;
+    color: #eceff4; font-size: 11px; line-height: normal; }
+  .poster-links { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+  .poster-links a { display: inline-flex; min-height: 44px; align-items: center; }
+  .poster-links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+  @media (max-width: 900px) { .poster-frame { height: 900px; } .poster-wordmark { bottom: 100px; } }
+  @media (max-width: 600px) {
+    .poster-frame { height: 810px; }
+    .poster-invite { margin-left: 6vw; margin-right: 6vw; padding-top: 45px; }
+    .poster-title { font-size: clamp(40px, 13.3vw, 66px); }
+    .poster-invite :global(.poster-form) { max-width: min(300px, 100%); }
+    .poster-art :global(img) { object-fit: none; height: 670px; width: auto; max-width: none; position: absolute;
+      bottom: 0; left: 54%; transform: translateX(-54%); }
+    .poster-art::after { background: linear-gradient(to bottom, #f8f6f1 0%, #f8f6f1 37%, rgba(248,246,241,.95) 46%, rgba(248,246,241,0) 64%),
+      linear-gradient(to top, rgba(8,13,22,.5), transparent 40%); }
+    .poster-wordmark { font-size: 24vw; left: 4vw; bottom: 122px; }
+    .poster-baseline { bottom: 68px; left: 6vw; right: 6vw; font-size: 11px; flex-direction: column; align-items: flex-start; gap: 12px; }
+  }
+  @media (forced-colors: active) { .poster-art { display: none; } .poster-wordmark, .poster-baseline { color: CanvasText; } }
+</style>
