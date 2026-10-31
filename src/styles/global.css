@@ -2,6 +2,7 @@
 
 :root {
   --paper: #faf9f6;
+  --footer-edge: #080b10;
   --field: #f5f6f7;
   --ink: #20242a;
   --ink-2: #3a4049;
@@ -48,6 +49,11 @@ html {
   /* Keep Safari rubber-band scrolling from exposing white beyond the dark footer. */
   overscroll-behavior-y: none;
 }
+
+/* Continue the footer color into Safari's bottom inset and overscroll canvas.
+   The content keeps its own paper surface; the artwork's geometry is unchanged. */
+html:has(.poster), body:has(.poster) { background-color: var(--footer-edge); }
+body:has(.poster) > main { background: var(--paper); }
 
 /* data-instant: motion is paused (src/scripts/explore.ts). */
 @media (prefers-reduced-motion: no-preference) {

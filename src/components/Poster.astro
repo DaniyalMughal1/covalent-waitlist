@@ -44,6 +44,12 @@ import { copy, site } from "../config/site";
     background: linear-gradient(to bottom, #f8f6f1 0%, #f8f6f1 34%, rgba(248,246,241,.94) 43%, rgba(248,246,241,0) 64%),
       linear-gradient(to top, rgba(8,13,22,.38), transparent 35%);
   }
+  /* Finish on the same solid color as the page canvas, without stretching the art. */
+  .poster-frame::after {
+    content: ""; position: absolute; inset: auto 0 0; height: 48px;
+    z-index: 1; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--footer-edge));
+  }
   .poster-invite { position: relative; z-index: 2; margin-left: 8vw; padding-top: 65px; }
   .poster-title { font-family: var(--font-display); font-weight: 400; font-variation-settings: normal;
     font-size: clamp(58px, 6vw, 96px); line-height: .97; letter-spacing: -.04em; margin: 0 0 28px; }
