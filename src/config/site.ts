@@ -5,7 +5,7 @@
 
 export const site = {
   name: "Covalent",
-  title: "Covalent · Your agents. In sync.",
+  title: "Covalent · Your team. In sync.",
   description:
     "Covalent gives your team’s coding agents shared context, clear file ownership and handoffs, so work on the same project stays in sync. Join the waitlist for early access.",
   // Canonical origin, e.g. "https://covalent.dev". Release input.
@@ -18,7 +18,7 @@ export const site = {
 
 export const copy = {
   eyebrow: "For teams building with agents",
-  headline: ["Your agents.", "In sync."],
+  headline: ["Your team.", "In sync."],
   body: ["Shared context. Clear ownership.", "A better way for your team’s agents", "to work on the same project."],
   heroFieldLabel: "Email for early access",
   finalFieldLabel: "Email for the waitlist",
