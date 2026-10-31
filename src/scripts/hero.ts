@@ -4,7 +4,6 @@ import { motion } from "./motion";
 import { MarkFeedback } from "../lib/mark-feedback";
 import { createPosterMotion } from "./hero-poster-motion";
 import { onPage } from "./page";
-import { createPhoneTilt, type TiltState } from "../lib/phone-tilt";
 import type { HeroScene } from "./hero-scene";
 
 const DRAG_THRESHOLD = 6;
@@ -44,39 +43,6 @@ onPage(() => {
   let press: Press | undefined;
   let dragging = false;
   let dragged = false;
-
-  const tiltButton = document.querySelector<HTMLButtonElement>("[data-hero-tilt]");
-  const touchDevice = window.matchMedia("(any-pointer: coarse)");
-  const sensor = window.DeviceOrientationEvent as (typeof DeviceOrientationEvent & {
-    requestPermission?: () => Promise<string>;
-  }) | undefined;
-  let tiltState: TiltState = "off";
-  const updateTiltControl = () => {
-    if (!tiltButton) return;
-    tiltButton.hidden = !sensor || !window.isSecureContext || !touchDevice.matches || motion.reduced;
-    tiltButton.disabled = !motion.ambient || tiltState === "requesting" || tiltState === "denied";
-    tiltButton.setAttribute("aria-pressed", String(tiltState === "on"));
-    tiltButton.textContent = { off: "Enable tilt", requesting: "Enabling tilt…", on: "Tilt on", denied: "Tilt unavailable" }[tiltState];
-  };
-  const phoneTilt = createPhoneTilt({
-    events: window,
-    requestPermission: sensor?.requestPermission ? () => sensor.requestPermission!() : undefined,
-    screenAngle: () => window.screen.orientation?.angle ?? (typeof window.orientation === "number" ? window.orientation : 0),
-    onTilt: (x, y) => { if (!press) scene.hover(x, y); },
-    onReset: () => scene.leave(),
-    onState: state => {
-      tiltState = state;
-      updateTiltControl();
-    },
-  });
-  tiltButton?.addEventListener("click", () => {
-    if (!motion.ambient) return;
-    if (tiltState === "on") phoneTilt.disable();
-    else void phoneTilt.enable();
-  }, { signal });
-  updateTiltControl();
-  // Browsers without an explicit permission API can start as soon as the logo is visible.
-  if (sensor && window.isSecureContext && touchDevice.matches && !sensor.requestPermission && motion.ambient) void phoneTilt.enable();
 
   const endPress = () => {
     press = undefined;
@@ -246,17 +212,14 @@ onPage(() => {
   const syncActive = () => {
     const visible = onScreen && !document.hidden;
     scene.setActive(visible);
-    phoneTilt.setActive(visible && motion.ambient && touchDevice.matches);
   };
   const unsubscribe = motion.subscribe(() => {
     scene.motionChanged();
     syncActive();
-    updateTiltControl();
   });
-  touchDevice.addEventListener("change", () => { syncActive(); updateTiltControl(); }, { signal });
   document.addEventListener("visibilitychange", syncActive, { signal });
   // A page kept in the back/forward cache must not spin there, and picks up where it left off.
-  window.addEventListener("pagehide", () => { scene.setActive(false); phoneTilt.setActive(false); }, { signal });
+  window.addEventListener("pagehide", () => { scene.setActive(false); }, { signal });
   window.addEventListener(
     "pageshow",
     (event) => {
@@ -364,7 +327,6 @@ onPage(() => {
     started.disconnect();
     visibility.disconnect();
     unsubscribe();
-    phoneTilt.destroy();
     gpuScene?.destroy();
     fallback.destroy();
     delete stage.dataset.renderer;

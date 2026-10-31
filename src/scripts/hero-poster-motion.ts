@@ -62,13 +62,15 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
   // Hold the captured first pose while WebGL loads. A separate idle animation here
   // would be at a different angle when the live scene starts its own clock.
   let ambient = false;
+  let motionAllowed = motion.ambient;
+  let scrollDirty = true, scrollTip = 0, scrollTarget = 0;
   let active = false, destroyed = false, frame = 0, last = 0, clock = 0;
   let x = 0, y = 0, targetX = 0, targetY = 0, dragX = 0, dragY = 0;
   let dragging = false, pulse = 0;
   const draw = () => {
-    const drift = ambient && motion.ambient ? Math.sin(clock * .75) * 3 : 0;
-    const yaw = x + (ambient && motion.ambient ? Math.sin(clock * .43) * 1.5 : 0);
-    const pitch = y + (ambient && motion.ambient ? Math.sin(clock * .57) : 0);
+    const drift = ambient && motionAllowed ? Math.sin(clock * .75) * 3 : 0;
+    const yaw = x + (ambient && motionAllowed ? Math.sin(clock * .43) * 1.5 : 0);
+    const pitch = y + scrollTip + (ambient && motionAllowed ? Math.sin(clock * .57) : 0);
     stage.style.transform = drift || pulse || pitch || yaw ? `perspective(1000px) translateY(${drift - pulse * 3}px) rotateX(${pitch}deg) rotateY(${yaw}deg)` : "";
     renderBonds();
   };
@@ -77,33 +79,40 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
     frame = 0;
     const dt = last ? Math.min((now - last) / 1000, .05) : 1 / 60;
     last = now;
-    if (ambient && motion.ambient) clock += dt;
-    feedback.update(dt, motion.ambient);
-    const gain = motion.ambient ? 1 - Math.exp(-dt * 9) : 1;
+    if (ambient && motionAllowed) clock += dt;
+    if (scrollDirty && ambient) {
+      scrollDirty = false;
+      const rect = stage.parentElement!.getBoundingClientRect();
+      const progress = Math.max(0, Math.min(1, (window.innerHeight - rect.top) / (window.innerHeight + rect.height)));
+      scrollTarget = motionAllowed && window.innerWidth < 1000 ? 12 * (0.5 - progress * progress * (3 - 2 * progress)) : 0;
+    }
+    feedback.update(dt, motionAllowed);
+    const gain = motionAllowed ? 1 - Math.exp(-dt * 9) : 1;
     x += (targetX - x) * gain; y += (targetY - y) * gain;
+    scrollTip += (scrollTarget - scrollTip) * gain;
     pulse *= Math.exp(-dt * 4);
     draw();
-    if ((motion.ambient && (ambient || feedback.engaged)) || Math.abs(x - targetX) + Math.abs(y - targetY) + pulse > .005) schedule();
+    if ((motionAllowed && (ambient || feedback.engaged)) || Math.abs(x - targetX) + Math.abs(y - targetY) + pulse > .005) schedule();
   };
   const reset = () => { targetX = targetY = 0; dragging = false; schedule(); };
   return {
-    startAmbient() { ambient = true; schedule(); },
+    startAmbient() { ambient = true; scrollDirty = true; schedule(); },
     reveal() { poster.style.visibility = ""; poster.style.opacity = ""; svg.style.visibility = ""; draw(); schedule(); },
     setActive(value) {
       active = value; last = 0;
-      if (value) { stage.style.willChange = "transform"; svg.style.visibility = ""; schedule(); }
+      if (value) { this.motionChanged(); scrollDirty = true; stage.style.willChange = "transform"; svg.style.visibility = ""; schedule(); }
       else { cancelAnimationFrame(frame); frame = 0; stage.style.willChange = ""; svg.style.visibility = "hidden"; }
     },
-    hover(nx, ny) { if (motion.ambient && !dragging) { targetX = nx * 10; targetY = -ny * 8; schedule(); } },
+    hover(nx, ny) { if (motionAllowed && !dragging) { targetX = nx * 10; targetY = -ny * 8; schedule(); } },
     leave() { if (!dragging) reset(); },
     dragStart() { dragging = true; dragX = x; dragY = y; },
     drag(dx, dy) { targetX = Math.max(-24, Math.min(24, dragX + dx * .14)); targetY = Math.max(-18, Math.min(18, dragY - dy * .12)); schedule(); },
     dragEnd: reset,
-    turn(direction = 1) { feedback.hop(direction); if (!motion.ambient) feedback.update(0, false); draw(); schedule(); },
-    setWorking(value) { feedback.setWorking(value); if (!motion.ambient) feedback.update(0, false); draw(); schedule(); },
-    settle() { feedback.finish(); pulse = motion.ambient ? 1 : 0; if (!motion.ambient) feedback.update(0, false); draw(); schedule(); },
-    scrolled() {},
-    motionChanged() { if (!motion.ambient) { x = y = targetX = targetY = pulse = 0; feedback.update(0, false); } draw(); schedule(); },
+    turn(direction = 1) { feedback.hop(direction); if (!motionAllowed) feedback.update(0, false); draw(); schedule(); },
+    setWorking(value) { feedback.setWorking(value); if (!motionAllowed) feedback.update(0, false); draw(); schedule(); },
+    settle() { feedback.finish(); pulse = motionAllowed ? 1 : 0; if (!motionAllowed) feedback.update(0, false); draw(); schedule(); },
+    scrolled() { if (motionAllowed) { scrollDirty = true; schedule(); } },
+    motionChanged() { motionAllowed = motion.ambient; scrollDirty = true; if (!motionAllowed) { x = y = targetX = targetY = pulse = scrollTip = scrollTarget = 0; feedback.update(0, false); } draw(); schedule(); },
     destroy() { destroyed = true; cancelAnimationFrame(frame); svg.remove(); stage.style.transform = ""; stage.style.willChange = ""; poster.style.clipPath = ""; },
   };
 }

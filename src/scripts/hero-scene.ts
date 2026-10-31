@@ -328,6 +328,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   let releaseAge = 0;
   let tipTarget = 0;
   let scrollDirty = true;
+  let compact = window.innerWidth < 1000;
 
   let phase: Phase = "hold";
   let phaseAge = 0;
@@ -356,7 +357,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
 
   // Spreads and lightens a touch as the mark lifts, and thins as it leans.
   const drawShadow = (strength: number) => {
-    const lift = object.position.y / AMBIENT.lift; // -1..1 through the drift
+    const lift = object.position.y / (compact ? 1.6 : AMBIENT.lift); // -1..1 through the drift
     const leaning = Math.abs(tiltYaw.x) + Math.abs(tiltPitch.x) + Math.abs(tip.x);
     shadow.position.x = tiltYaw.x * 62;
     shadow.scale.set(
@@ -370,9 +371,9 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   const pose = () => {
     const a = Math.sin(Math.min(clock / 2.4, 1) * (Math.PI / 2)) ** 2 * ambientGain; // ambient eases in from nothing
     const t = clock * Math.PI * 2;
-    object.position.y = AMBIENT.lift * a * Math.sin(t / 9);
-    object.rotation.y = REST.yaw + tiltYaw.x + AMBIENT.yaw * a * Math.sin(t / 11.3);
-    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + AMBIENT.pitch * a * Math.sin(t / 8.3);
+    object.position.y = (compact ? 1.6 : AMBIENT.lift) * a * Math.sin(t / 9);
+    object.rotation.y = REST.yaw + tiltYaw.x + (compact ? 2.5 * DEG : AMBIENT.yaw) * a * Math.sin(t / 11.3);
+    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + (compact ? 1.5 * DEG : AMBIENT.pitch) * a * Math.sin(t / 8.3);
     const shape = `${feedback.rotation}/${feedback.circle}/${feedback.done}/${feedback.comet}`;
     if (shape !== lastShape) {
       lastShape = shape;
@@ -427,9 +428,12 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
       tipTarget = 0;
       return;
     }
-    // Starts as the stage reaches the header and finishes as most of it has gone.
+    // On phones the mark responds throughout its visible travel, below the form.
+    // Desktop keeps the original tip as the mark passes under the header.
     const rect = stage.getBoundingClientRect();
-    tipTarget = -SCROLL_TIP * smooth(clamp01((88 - rect.top) / (rect.height * 0.8)));
+    tipTarget = compact
+      ? 12 * DEG * (0.5 - smooth(clamp01((window.innerHeight - rect.top) / (window.innerHeight + rect.height))))
+      : -SCROLL_TIP * smooth(clamp01((88 - rect.top) / (rect.height * 0.8)));
   };
 
   const setPhase = (next: Phase) => {
@@ -571,6 +575,8 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     renderer.setDrawingBufferSize(stageSize, stageSize, Math.min(deviceCap, ratioCeiling));
   };
   const resize = () => {
+    compact = window.innerWidth < 1000;
+    scrollDirty = true;
     sizeBuffer();
     if (!lost && !destroyed) draw();
   };
