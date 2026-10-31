@@ -7,7 +7,8 @@ backgrounds blend together. The middle demo, FAQ and Explore menu are parked;
 their source remains available for a future product site.
 
 Built with Astro 7, Three.js and one on-demand route, `POST /api/waitlist`.
-There is no Anime.js, GSAP, Motion or React. No real signup provider is connected.
+There is no Anime.js, GSAP, Motion or React. The Supabase signup adapter is implemented; connect a project using
+[`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md).
 
 [`DESIGN.md`](DESIGN.md) records the current scope above the earlier design notes.
 [`docs/launch-kit/`](docs/launch-kit/) is retained as superseded research history.
@@ -25,8 +26,8 @@ npm run build && npm run preview       # production build, served by the Node ad
 ```
 
 Without `WAITLIST_PROVIDER`, signups answer `503 unavailable` and the page shows its
-retry message. That is deliberate: no provider has been chosen yet, and the page
-never reports success it did not receive.
+retry message. Set `WAITLIST_PROVIDER=supabase` plus the two Supabase credentials after applying
+the database migration. The page never reports success it did not receive.
 
 ### Vercel deployment
 
@@ -84,7 +85,9 @@ src/scripts/page.ts         onPage: setup and teardown across navigation
 tools/render-mark-poster.mjs regenerates src/assets/mark-poster.png
 tools/render-poster-art.mjs bakes src/assets/poster-art.png from the original art
 public/fonts/               the fonts (status in docs/ASSET-PROVENANCE.md)
-docs/WAITLIST-PROVIDER.md   the signup contract and how to add a real provider
+docs/SUPABASE-SETUP.md     exact Supabase + Vercel connection steps
+supabase/migrations/       table, permissions, and atomic signup/rate-limit function
+docs/WAITLIST-PROVIDER.md   the signup contract and adapter behavior
 docs/ASSET-PROVENANCE.md    where each asset came from, including the fonts
 ```
 
@@ -95,7 +98,7 @@ docs/ASSET-PROVENANCE.md    where each asset came from, including the fonts
   appears only after a 2xx response with an accepted status. A success in one form updates
   the other form when it holds the same address, and a failure does too. A failure nobody
   can see brings the page back to the form; a success never moves the page. The email is
-  never stored, logged, or put in a URL. Without JavaScript the form posts natively and
+  stored only in the configured signup destination, never in browser storage, logs, or a URL. Without JavaScript the form posts natively and
   the server redirects to a result page.
 - **Header "Join the waitlist".** Focuses the hero form if it is on screen, and otherwise
   takes you to the closing form. Visitors never have to finish the story to sign up.
@@ -119,9 +122,9 @@ These block a public release. None has been decided here.
    metadata says web use needs a licence from 205TF. It must not be deployed publicly as it
    stands. Buy the web licence or swap `--font-display`. See `docs/ASSET-PROVENANCE.md`.
 
-2. **Signup destination.** Choose the provider, add an adapter in
-   `src/lib/waitlist/providers/`, set its secrets server-side, decide single vs double
-   opt-in, then verify a real address end to end. See `docs/WAITLIST-PROVIDER.md`.
+2. **Signup destination.** The Supabase adapter is ready. Apply the SQL migration,
+   set the three Vercel variables, and verify a real address end to end. It uses
+   single opt-in and stores signups without sending emails. See `docs/SUPABASE-SETUP.md`.
 3. **Privacy notice and contact.** Set `site.privacyUrl` and `site.contactEmail` in
    `src/config/site.ts`; the links appear under the forms and in the footer only when
    set.
@@ -130,8 +133,8 @@ These block a public release. None has been decided here.
    with the master, then regenerate the poster.
 5. **Canonical URL and social image.** Set `site.url`; no Open Graph image exists yet.
 6. **Hosting.** Vercel builds use `@astrojs/vercel`; local production previews use
-   `@astrojs/node`. The rate limiter is per process; use provider/platform limits
-   for reliable rate limiting across serverless instances.
+   `@astrojs/node`. Supabase adds a shared database rate counter alongside the
+   per-process limiter. Turnstile can be added if bot traffic warrants it.
 7. **Claims review** of product copy (agent support, early-access terms) before launch.
 
 ## Licenses

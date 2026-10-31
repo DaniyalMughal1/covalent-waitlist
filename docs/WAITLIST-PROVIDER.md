@@ -3,16 +3,16 @@
 The page posts signups to one on-demand route, `POST /api/waitlist`
 (`src/pages/api/waitlist.ts`). That route is a thin wrapper around
 `src/lib/waitlist/handler.ts`, which validates, rate-limits and hands the address
-to a **provider adapter**. No real provider has been chosen yet, so out of the box
-every signup answers `503 unavailable`. The page shows its recoverable failure
-state instead of pretending to succeed.
+to a **provider adapter**. Supabase is implemented; follow
+[`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) to apply the migration and configure Vercel.
+Without configuration, signups answer `503 unavailable` rather than pretending to succeed.
 
 Rules this code enforces:
 
 - Success is reported only after a real successful response from the configured
   destination. There is no fallback to browser storage, files or a fake success.
 - The email address is never written to logs, analytics, URLs or persistent
-  storage by this code. Responses never echo it.
+  storage outside the configured provider. Responses never echo it.
 - A duplicate signup looks exactly like a new one from the outside.
 
 ## Public contract
@@ -26,7 +26,9 @@ Rules this code enforces:
 
 - Script callers must send `Accept: application/json` to get JSON back. A form
   body *without* that header is treated as a no-JS form post and gets a redirect.
-- `source` is optional. Unknown values become `"no-js"` for no-JS form posts and
+- Both body types also accept optional `utm_source` and `referral_code` campaign identifiers.
+  These become the database source/referral fields after validation; see the setup guide.
+- `source` identifies the form, not the marketing campaign. It is optional. Unknown values become `"no-js"` for no-JS form posts and
   `"hero"` otherwise.
 
 **Response:** JSON is always exactly `{ "status": "<status>" }` with
@@ -61,7 +63,7 @@ you yet. Please try again." (keep the typed email).
 **Server-side validation** is permissive on purpose. The handler trims, allows at
 most 254 characters, splits on the last `@`, requires a 1–64 character local part
 and a domain that contains a dot, does not start or end with a dot, and has no
-whitespace or control characters. Only the domain is lowercased.
+whitespace or control characters. The entire address is lowercased for case-insensitive uniqueness. Plus tags and dots are preserved.
 
 ## How the provider is selected
 
@@ -72,6 +74,7 @@ whitespace or control characters. Only the domain is lowercased.
 | unset or empty | `unconfigured`: every signup → 503. Log reason: `WAITLIST_PROVIDER is not set` |
 | `test` and (`astro dev` **or** `WAITLIST_ALLOW_TEST_PROVIDER=1`) | controlled test destination |
 | `test` otherwise | `unconfigured`. Log reason: `test provider refused outside development` |
+| `supabase` | real database adapter; requires `SUPABASE_URL` and `SUPABASE_SECRET_KEY` |
 | a registered adapter name | that adapter |
 | anything else | `unconfigured`. Log reason: `unknown WAITLIST_PROVIDER` |
 
@@ -83,7 +86,9 @@ All are server-side only. Never give them a `PUBLIC_` prefix.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `WAITLIST_PROVIDER` | empty | Destination name, as in the table above |
+| `WAITLIST_PROVIDER` | empty | Set to `supabase` for real signups |
+| `SUPABASE_URL` | empty | HTTPS project URL |
+| `SUPABASE_SECRET_KEY` | empty | Server-only `sb_secret_` key |
 | `WAITLIST_ALLOW_TEST_PROVIDER` | empty | `1` allows `test` in a built/preview server. Never set it in production |
 | `WAITLIST_TEST_CONFIRMATION` | `none` | `double-opt-in` makes the test destination behave like a confirmation-email provider |
 | `WAITLIST_RATE_LIMIT` | `20` | Attempts per client address per window |
@@ -104,6 +109,8 @@ The limiter keys on one address per visitor. That address must be one the
 visitor cannot write, or the limiter can be skipped by rotating it, and used to
 lock a chosen person out by sending their address.
 
+- **Standard Vercel deployment:** leave the proxy-hop setting unset. The Vercel
+  adapter receives Vercel's overwritten client-IP header. See the Supabase setup guide.
 - **Server reachable directly, no proxy:** leave `WAITLIST_TRUSTED_PROXY_HOPS`
   unset and do not set `security.allowedDomains`. The key is the TCP peer address
   from `@astrojs/node`.
@@ -132,6 +139,8 @@ lock a chosen person out by sending their address.
 - If an adapter supplies no client address at all, the local limiter is skipped
   rather than putting every visitor into one shared bucket. `X-Forwarded-For` is
   never used as a fallback unless `WAITLIST_TRUSTED_PROXY_HOPS` says it is trusted.
+  The Supabase adapter additionally refuses signups without a valid trusted IP, so
+  this cannot silently disable its database rate limit.
 
 #### Origin check behind a proxy
 
@@ -146,9 +155,9 @@ long as `WAITLIST_TRUSTED_PROXY_HOPS` is set too. With no proxy, leave
 
 #### Other notes
 
-- The rate limiter lives in memory and is per process. It does not share counts
-  across instances or survive restarts. Rely on the provider's limits and the
-  platform's edge rate limiting as well.
+- The local limiter is per process. Supabase additionally applies an atomic shared
+  database counter to valid signup attempts, using an HMAC digest of the client
+  address. See `SUPABASE-SETUP.md` for limits and retention.
 - Each request writes one log line:
   `{"event":"waitlist","outcome":"…","provider":"…","source":"…","status":"…"}`,
   plus an optional non-email `reason`. Provider error text is scrubbed of anything
@@ -157,8 +166,7 @@ long as `WAITLIST_TRUSTED_PROXY_HOPS` is set too. With no proxy, leave
 ## Adding a real provider
 
 1. Create `src/lib/waitlist/providers/<name>.ts` exporting a `ProviderFactory`.
-2. Register it in `REAL_PROVIDERS` in `providers/index.ts`. The block is marked
-   `REAL PROVIDER REGISTRY`.
+2. Register it in `REAL_PROVIDERS` in `providers/index.ts`. The Supabase adapter is already registered there.
 3. Set `WAITLIST_PROVIDER=<name>` and the adapter's secrets in the server
    environment.
 
@@ -271,7 +279,8 @@ per client is easy to hit while clicking through states, so raise
 
 ## Release checklist
 
-- [ ] Choose the provider. Write and register its adapter, and unit-test its status mapping.
+- [x] Supabase adapter implemented, registered, and tested.
+- [ ] Apply the Supabase migration and configure the production project.
 - [ ] Store secrets server-side only, in the host's environment. No `PUBLIC_` prefix, never committed.
 - [ ] Decide single or double opt-in. Make the adapter's `confirmation` match the
       list's real setting, and make the page copy match it too.

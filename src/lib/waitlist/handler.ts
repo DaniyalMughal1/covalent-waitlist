@@ -7,10 +7,11 @@
  *
  * Privacy rules enforced here:
  * - The email is never logged, echoed, put in a URL or stored by this module.
- * - The client address is used only as an in-memory rate-limit key; never logged.
+ * - The client address is never logged; Supabase stores only a keyed rate-limit digest.
  * - Success is reported only when the configured provider says so.
  */
 
+import { attributionFromUrl, campaignSource, referralCode } from "./attribution";
 import { selectProvider, TEST_DESTINATION_ID } from "./providers";
 import { rateLimitKey, trustedProxyHopsFromEnv, type RateLimiter } from "./rate-limit";
 import {
@@ -124,7 +125,7 @@ export async function handleWaitlistRequest(
       return { http: 413, status: "invalid", outcome: "body_too_large" };
     }
 
-    let fields: { email: unknown; source: unknown };
+    let fields: SignupFields;
     try {
       fields = await parseFields(contentType, rawContentType, bytes);
     } catch {
@@ -158,9 +159,16 @@ export async function handleWaitlistRequest(
     }
     email = normalized.email;
 
+    const attribution = referralAttribution(request);
     const result = await callProvider(
       provider,
-      { email, source },
+      {
+        email,
+        source,
+        clientAddress: address,
+        acquisitionSource: campaignSource(fields.utm_source ?? attribution?.utm_source),
+        referralCode: referralCode(fields.referral_code ?? attribution?.referral_code),
+      },
       ctx.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
     );
     if (result.type === "timeout") {
@@ -386,28 +394,55 @@ async function readBodyCapped(
   return bytes;
 }
 
+interface SignupFields {
+  email: unknown;
+  source: unknown;
+  utm_source: unknown;
+  referral_code: unknown;
+}
+
 async function parseFields(
   contentType: string,
   rawContentType: string,
   bytes: Uint8Array<ArrayBuffer>,
-): Promise<{ email: unknown; source: unknown }> {
+): Promise<SignupFields> {
   if (contentType === JSON_TYPE) {
     const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new Error("JSON body must be an object");
     }
     const record = parsed as Record<string, unknown>;
-    return { email: record.email, source: record.source };
+    return {
+      email: record.email, source: record.source,
+      utm_source: record.utm_source, referral_code: record.referral_code,
+    };
   }
 
   if (contentType === URLENCODED_TYPE) {
     const params = new URLSearchParams(new TextDecoder().decode(bytes));
-    return { email: params.get("email"), source: params.get("source") };
+    return {
+      email: params.get("email"), source: params.get("source"),
+      utm_source: params.get("utm_source"), referral_code: params.get("referral_code"),
+    };
   }
 
   // multipart/form-data: let the platform parser handle boundaries.
   const form = await new Response(bytes, { headers: { "content-type": rawContentType } }).formData();
-  return { email: form.get("email"), source: form.get("source") };
+  return {
+    email: form.get("email"), source: form.get("source"),
+    utm_source: form.get("utm_source"), referral_code: form.get("referral_code"),
+  };
+}
+
+/** Native form submissions can retain campaign attribution from a same-host page. */
+function referralAttribution(request: Request) {
+  try {
+    const referrer = new URL(request.headers.get("referer") ?? "");
+    if (referrer.host === new URL(request.url).host) return attributionFromUrl(referrer);
+  } catch {
+    // Missing or invalid referrer simply means direct traffic.
+  }
+  return undefined;
 }
 
 function parseSource(value: unknown): SignupSource | undefined {

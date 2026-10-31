@@ -45,6 +45,6 @@ export function normalizeEmail(raw: unknown): NormalizeEmailResult {
     return { ok: false, reason: "format" };
   }
 
-  // The local part is case-sensitive in principle, so only the domain is lowercased.
-  return { ok: true, email: `${local}@${domain.toLowerCase()}` };
+  // Waitlist identity is case-insensitive. Preserve plus tags and dots.
+  return { ok: true, email: trimmed.toLowerCase() };
 }

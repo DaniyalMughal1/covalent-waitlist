@@ -1,6 +1,7 @@
 // Waitlist forms: inline validation, one request at a time, and states that reflect the
 // server's actual response (see docs/WAITLIST-PROVIDER.md). Emails are never written to
 // storage, the URL or logs; they only travel in the POST body.
+import { attributionFromUrl } from "../lib/waitlist/attribution";
 import { copy, messages } from "../config/site";
 import { normalizeEmail } from "../lib/waitlist/validate";
 import { motion } from "./motion";
@@ -80,7 +81,10 @@ async function submit(form: HTMLFormElement) {
     const response = await fetch(ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ email: input.value.trim(), source }),
+      body: JSON.stringify({
+        email: input.value.trim(), source,
+        ...attributionFromUrl(new URL(window.location.href)),
+      }),
       credentials: "same-origin",
       cache: "no-store",
       signal: controller.signal,

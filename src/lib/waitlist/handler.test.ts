@@ -112,7 +112,7 @@ describe("provider outcome mapping", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-waitlist-destination")).toBeNull();
     expect(provider.calls).toHaveLength(1);
-    expect(provider.calls[0]?.email).toBe("Person@example.com");
+    expect(provider.calls[0]?.email).toBe("person@example.com");
     expect(provider.calls[0]?.source).toBe("final");
   });
 
@@ -357,12 +357,12 @@ describe("email validation", () => {
     }
   });
 
-  it("trims and lowercases only the domain, splitting on the last @", () => {
+  it("trims and lowercases the complete address, splitting on the last @", () => {
     expect(normalizeEmail("  Mixed.Case@Sub.EXAMPLE.Com\n")).toEqual({
       ok: true,
-      email: "Mixed.Case@sub.example.com",
+      email: "mixed.case@sub.example.com",
     });
-    expect(normalizeEmail('"A@B"@Example.ORG')).toEqual({ ok: true, email: '"A@B"@example.org' });
+    expect(normalizeEmail('"A@B"@Example.ORG')).toEqual({ ok: true, email: '"a@b"@example.org' });
   });
 
   it("passes permissive-but-valid addresses through the handler", async () => {
@@ -949,7 +949,7 @@ describe("no-JS form posts", () => {
 
 describe("privacy", () => {
   const SECRET = "Secret.Person+leak@Example.ORG";
-  const SECRET_NORMALIZED = "Secret.Person+leak@example.org";
+  const SECRET_NORMALIZED = "secret.person+leak@example.org";
   const IP = "203.0.113.99";
 
   function assertNoLeak(result: CallResult): void {
@@ -1059,5 +1059,36 @@ describe("privacy", () => {
       },
     });
     expect(res.status).toBe(200);
+  });
+});
+
+
+describe("signup campaign metadata", () => {
+  it("keeps form source separate and uses the adapter address, not a spoofed header", async () => {
+    const provider = fakeProvider({ kind: "accepted" });
+    await call(jsonRequest({ email: EMAIL, source: "final", utm_source: "LinkedIn", referral_code: "launch" }, {
+      headers: { "x-forwarded-for": "203.0.113.99" },
+    }), { provider, clientAddress: "203.0.113.1" });
+    expect(provider.calls[0]).toMatchObject({
+      source: "final", acquisitionSource: "linkedin", referralCode: "launch", clientAddress: "203.0.113.1",
+    });
+  });
+  it("preserves campaign links for native form posts", async () => {
+    const provider = fakeProvider({ kind: "accepted" });
+    const { res } = await call(formRequest({ email: EMAIL }, { referer: `${SITE}/?utm_source=x&ref=friend-1` }), { provider });
+    expect(res.status).toBe(303);
+    expect(provider.calls[0]).toMatchObject({ acquisitionSource: "x", referralCode: "friend-1" });
+  });
+  it("does not use external referrers as campaign metadata", async () => {
+    const provider = fakeProvider({ kind: "accepted" });
+    await call(formRequest({ email: EMAIL }, { referer: "https://untrusted.test/?utm_source=wrong&ref=wrong" }), { provider });
+    expect(provider.calls[0]).toMatchObject({ acquisitionSource: "direct", referralCode: null });
+  });
+  it("drops malformed metadata and never logs attribution or addresses", async () => {
+    const provider = fakeProvider({ kind: "accepted" });
+    const { logs } = await call(jsonRequest({ email: EMAIL, utm_source: "private@example.com", referral_code: "<script>" }), { provider, clientAddress: "203.0.113.1" });
+    expect(provider.calls[0]).toMatchObject({ acquisitionSource: "direct", referralCode: null });
+    expect(JSON.stringify(logs)).not.toContain("private@example.com");
+    expect(JSON.stringify(logs)).not.toContain("203.0.113.1");
   });
 });

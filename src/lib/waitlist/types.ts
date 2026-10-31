@@ -22,9 +22,15 @@ export type ProviderOutcome =
   | { kind: "unavailable"; reason: string };
 
 export interface SubscribeInput {
-  /** Normalized address (trimmed, domain lowercased). Never log or persist it outside the provider. */
+  /** Normalized address (trimmed and lowercased). Never log or persist it outside the provider. */
   email: string;
   source: SignupSource;
+  /** Campaign identifier, separate from the form's internal source. */
+  acquisitionSource?: string;
+  /** Incoming referral identifier, reserved for future referrals. */
+  referralCode?: string | null;
+  /** Trusted server address; Supabase persists only a keyed digest for rate limiting. */
+  clientAddress?: string;
   /**
    * Aborted when the handler gives up waiting (provider timeout). Adapters should
    * pass it to `fetch` so a slow upstream request is cancelled. Optional for

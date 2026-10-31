@@ -7,8 +7,8 @@ import type { WaitlistEnv } from "./types";
  * - Per process. Each server instance, serverless invocation or worker keeps its
  *   own counts, and a restart forgets them. It slows down casual abuse of a
  *   single instance; it is not a distributed limiter.
- * - Production should ALSO rely on the signup provider's own limits and on the
- *   hosting platform's edge/WAF rate limiting.
+ * - The Supabase adapter adds an atomic database counter across instances.
+ *   Hosting edge/WAF limits can further reduce abusive traffic.
  * - Addresses are held in memory only for the length of the window. They are
  *   never logged or persisted.
  * - The key is only as trustworthy as the address it is given. See

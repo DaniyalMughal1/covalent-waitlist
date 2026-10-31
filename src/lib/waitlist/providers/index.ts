@@ -1,4 +1,5 @@
 import type { WaitlistEnv, WaitlistProvider } from "../types";
+import { createSupabaseProvider } from "./supabase";
 import { createTestDestination } from "./test-destination";
 import { createUnconfiguredProvider } from "./unconfigured";
 
@@ -16,18 +17,8 @@ export const UNKNOWN_PROVIDER_REASON = "unknown WAITLIST_PROVIDER";
  */
 export type ProviderFactory = (env: WaitlistEnv) => WaitlistProvider;
 
-// ---------------------------------------------------------------------------
-// REAL PROVIDER REGISTRY — register production adapters here.
-//
-// No signup destination has been chosen yet, so this is intentionally empty.
-// To add one (see docs/WAITLIST-PROVIDER.md, "Adding a real provider"):
-//   1. Create src/lib/waitlist/providers/<name>.ts exporting a ProviderFactory.
-//   2. Import it above and add it below, e.g.  `example: createExampleProvider,`
-//   3. Set WAITLIST_PROVIDER=<name> plus its secrets in the server environment.
-// Never register anything that reports success without a real upstream response.
-// ---------------------------------------------------------------------------
 const REAL_PROVIDERS: Readonly<Record<string, ProviderFactory>> = {
-  // example: createExampleProvider,
+  supabase: createSupabaseProvider,
 };
 
 /**

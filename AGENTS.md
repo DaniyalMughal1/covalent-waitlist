@@ -20,6 +20,6 @@
 - Before push: `npm run check`, `npm test`, `VERCEL=1 npm run build`.
 - Vercel selects its adapter via `VERCEL=1`; local builds retain the standalone Node adapter.
 - Do not set the output directory to `dist`; use the adapter's `.vercel/output` manifest.
-- The signup provider is unconfigured. Keep test-provider switches off in production; a valid submission must not claim success until a real provider accepts it.
+- The Supabase adapter is implemented; connection steps are in `docs/SUPABASE-SETUP.md`. Keep test-provider switches off in production; a valid submission must not claim success until Supabase accepts it.
 - Keep environment files and `.vercel/` out of Git. The tracked `.env.example` is a blank template.
 - Preserve the current hero/footer layout. Middle demo and FAQ code remain parked.
