@@ -14,7 +14,7 @@ There is no Anime.js, GSAP, Motion or React. No real signup provider is connecte
 
 ## Run it
 
-Node 22.12+ (Node 24 recommended).
+Node 24.x.
 
 ```sh
 npm install
@@ -27,6 +27,19 @@ npm run build && npm run preview       # production build, served by the Node ad
 Without `WAITLIST_PROVIDER`, signups answer `503 unavailable` and the page shows its
 retry message. That is deliberate: no provider has been chosen yet, and the page
 never reports success it did not receive.
+
+### Vercel deployment
+
+The GitHub repository is connected to the `covalent-waitlist` Vercel project.
+Pushes to `main` trigger production deployments at
+https://covalent-waitlist.vercel.app/. Vercel sets `VERCEL=1`, selecting the Vercel
+adapter and generating `.vercel/output/` with the static homepage and signup function.
+The local Node preview commands above remain unchanged.
+
+To verify the hosting build locally, run `VERCEL=1 npm run build`.
+Do not set the output directory to `dist`: the Vercel adapter supplies the output
+manifest. Do not enable the test signup provider in production. Until a real
+provider is connected, valid signup attempts return `503 unavailable`.
 
 ### Testing the form states
 
@@ -116,10 +129,9 @@ These block a public release. None has been decided here.
    supplied flat mark (regular hexagon, measured stroke and bond proportions). Replace it
    with the master, then regenerate the poster.
 5. **Canonical URL and social image.** Set `site.url`; no Open Graph image exists yet.
-6. **Hosting adapter.** `@astrojs/node` is the default; swap it for the host's adapter
-   in `astro.config.mjs`. The rate limiter is per process; rely on provider/platform
-   limits too. The Node adapter compresses nothing and serves `/fonts/` with `max-age=0`,
-   so the host or a proxy must compress text and long-cache `/fonts/`.
+6. **Hosting.** Vercel builds use `@astrojs/vercel`; local production previews use
+   `@astrojs/node`. The rate limiter is per process; use provider/platform limits
+   for reliable rate limiting across serverless instances.
 7. **Claims review** of product copy (agent support, early-access terms) before launch.
 
 ## Licenses

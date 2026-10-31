@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=22.12"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "astro dev",
@@ -15,11 +15,13 @@
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",
+    "@astrojs/vercel": "11.0.17",
     "astro": "7.4.4",
     "three": "0.180.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@types/node": "24.19.2",
     "@types/three": "0.180.0",
     "typescript": "6.0.3",
     "vitest": "5.0.5"
