@@ -4,6 +4,9 @@ import { BOND_STROKE } from "./mark";
 import type { BondPoint } from "./mark-feedback";
 
 const CAP = 24;
+// Where two strokes meet, one's rounded end lies inside the other's body at the same height,
+// and the two would flicker through each other. A hair lower, the end stays hidden.
+const CAP_DROP = .12;
 // The original mark's flat face and rounded bevel, swept along the terminal's moving
 // centreline. Buffers stay allocated; no geometry creation/disposal occurs per frame.
 export class MarkRibbon extends BufferGeometry {
@@ -56,12 +59,12 @@ export class MarkRibbon extends BufferGeometry {
       this.tangents.set([nx, ny, 1 / Math.max(.5, nx * -ay + ny * ax)], i * 3);
     }
     let station = 0;
-    const write = (point: BondPoint, nx: number, ny: number, miter: number) => {
+    const write = (point: BondPoint, nx: number, ny: number, miter: number, drop = 0) => {
       for (let k = 0; k < this.rows.length; k++) {
         const row = this.rows[k]!, at = (station * this.rows.length + k) * 3;
         this.positions[at] = point[0] + nx * row.h * miter;
         this.positions[at + 1] = -point[1] + ny * row.h * miter;
-        this.positions[at + 2] = row.z + depth;
+        this.positions[at + 2] = row.z + depth - drop;
         this.normals[at] = nx * row.radial;
         this.normals[at + 1] = ny * row.radial;
         this.normals[at + 2] = row.axial;
@@ -73,13 +76,13 @@ export class MarkRibbon extends BufferGeometry {
     const endAngle = Math.atan2(this.tangents[(n - 1) * 3 + 1]!, this.tangents[(n - 1) * 3]!);
     for (let k = 1; k <= CAP; k++) {
       const a = endAngle - Math.PI * k / CAP;
-      write(points[n - 1]!, Math.cos(a), Math.sin(a), 1);
+      write(points[n - 1]!, Math.cos(a), Math.sin(a), 1, k < CAP ? CAP_DROP : 0);
     }
     for (let i = n - 1; i >= 0; i--) write(points[i]!, -this.tangents[i * 3]!, -this.tangents[i * 3 + 1]!, this.tangents[i * 3 + 2]!);
     const startAngle = Math.atan2(-this.tangents[1]!, -this.tangents[0]!);
     for (let k = 1; k <= CAP; k++) {
       const a = startAngle - Math.PI * k / CAP;
-      write(points[0]!, Math.cos(a), Math.sin(a), 1);
+      write(points[0]!, Math.cos(a), Math.sin(a), 1, k < CAP ? CAP_DROP : 0);
     }
     this.attributes.position!.needsUpdate = true;
     this.attributes.normal!.needsUpdate = true;

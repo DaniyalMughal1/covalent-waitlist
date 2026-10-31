@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INNER_RADIUS, MarkFeedback } from "./mark-feedback";
+import { INNER_RADIUS, MarkFeedback, type BondPoint } from "./mark-feedback";
 const advance = (mark: MarkFeedback, seconds: number) => { for (let i = 0; i < seconds * 60; i++) mark.update(1 / 60, true); };
 describe("terminal logo feedback", () => {
   it("hops sixty degrees per edit without jumping at high typing speeds", () => {
@@ -65,5 +65,44 @@ describe("terminal geometry", () => {
     expect(points[0]![1]).toBeCloseTo(0, 8);
     expect(points[179]![0]).toBeCloseTo(.6 * INNER_RADIUS * 1.05, 8);
     expect(points[179]![1]).toBeCloseTo(-.5 * INNER_RADIUS * 1.05, 8);
+    for (const [end, start] of [[59, 60], [119, 120]] as const) {
+      expect(points[end]![0]).toBeCloseTo(points[start]![0], 8);
+      expect(points[end]![1]).toBeCloseTo(points[start]![1], 8);
+    }
+  });
+  it("lets the spinning ring come to rest before the check starts", () => {
+    const mark = new MarkFeedback();
+    mark.setWorking(true); advance(mark, 1);
+    mark.setWorking(false); mark.finish();
+    advance(mark, .6);
+    expect(mark.done).toBe(0);
+    advance(mark, 1);
+    expect(mark.done).toBe(1);
+    expect(mark.rotation % 120).toBe(0);
+  });
+  it.each([0, 1, 2, 3, 4, 5])("takes straight bars into the check without crossing, after %i hops", (hops) => {
+    const mark = new MarkFeedback();
+    for (let i = 0; i < hops; i++) mark.hop();
+    mark.finish();
+    const side = (a: BondPoint, b: BondPoint, c: BondPoint) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const crosses = (p: BondPoint, q: BondPoint, r: BondPoint, s: BondPoint) =>
+      side(p, q, r) * side(p, q, s) < -1e-6 && side(r, s, p) * side(r, s, q) < -1e-6;
+    let forming = 0;
+    for (let frame = 0; frame < 150; frame++) {
+      mark.update(1 / 60, true);
+      if (mark.done === 0) continue;
+      forming++;
+      const points = mark.points();
+      const bars = [0, 1, 2].map(i => [points[i * 60]!, points[i * 60 + 30]!, points[i * 60 + 59]!] as const);
+      for (const [a, middle, b] of bars) {
+        expect(Math.abs(side(a, b, middle))).toBeLessThan(1);
+        expect(Math.hypot(b[0] - a[0], b[1] - a[1])).toBeGreaterThan(20);
+      }
+      for (const [i, j] of [[0, 1], [0, 2], [1, 2]] as const) {
+        expect(crosses(bars[i]![0], bars[i]![2], bars[j]![0], bars[j]![2])).toBe(false);
+      }
+    }
+    expect(forming).toBeGreaterThan(30);
+    expect(mark.done).toBe(1);
   });
 });

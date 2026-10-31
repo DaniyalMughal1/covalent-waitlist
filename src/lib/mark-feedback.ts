@@ -7,19 +7,19 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const inOut = (x: number) => x < .5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 const outCubic = (x: number) => 1 - (1 - x) ** 3;
 export const INNER_RADIUS = 100 * Math.cos(30 * DEG) - 22;
-export const GLYPH_POINTS = 180;
 export type BondPoint = readonly [x: number, y: number, brightness: number];
 const CHECK = [[-.55, 0], [-.17, .42], [.6, -.5]] as const;
-const checkLengths = [Math.hypot(.38, .42), Math.hypot(.77, -.92)];
-const checkTotal = checkLengths[0]! + checkLengths[1]!;
-const checkPoints = Array.from({ length: GLYPH_POINTS }, (_, i) => {
-  let d = checkTotal * i / (GLYPH_POINTS - 1);
-  const j = d > checkLengths[0]! ? 1 : 0;
-  if (j) d -= checkLengths[0]!;
-  const t = Math.min(1, d / checkLengths[j]!);
-  const a = CHECK[j]!, b = CHECK[j + 1]!;
-  return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
-});
+const CHECK_MIDDLE = [(CHECK[1][0] + CHECK[2][0]) / 2, (CHECK[1][1] + CHECK[2][1]) / 2] as const;
+// The check is three straight stretches, one per bond. Each takes the bond nearest it, running
+// the same way: the lower left makes the short stroke, the lower right and the top make the
+// long one. Nothing crosses, and a straight bar moving to a straight stretch stays straight,
+// where a stroke dragged between unrelated points folds and knots. `from` is the bond's section
+// at rotation 0. Neighbouring stretches share an end, so the joins close without a seam.
+const CHECK_STRETCHES = [
+  { start: CHECK[0], end: CHECK[1], from: 2, reversed: true },
+  { start: CHECK[1], end: CHECK_MIDDLE, from: 1, reversed: true },
+  { start: CHECK_MIDDLE, end: CHECK[2], from: 0, reversed: false },
+];
 type Shape = "bonds" | "swing" | "circle" | "settle";
 
 export class MarkFeedback {
@@ -34,6 +34,7 @@ export class MarkFeedback {
   private shapeT = 0;
   private swingFrom = 0;
   private glyph = false;
+  private turns = 0; // thirds of a turn made when the check began, so which bond sits where
   private settle = { r0: 0, r1: 0, m0: 0, c0: 0, dur: .9 };
 
   hop(direction = 1) {
@@ -52,7 +53,10 @@ export class MarkFeedback {
       }
     } else if (this.shape === "swing" || this.shape === "circle") {
       const dur = .9;
-      this.settle = { r0: this.rotation, r1: Math.ceil((this.rotation + 600 * dur / 3) / 60) * 60, m0: this.circle, c0: this.comet, dur };
+      // A whole third of a turn, which is the mark's own pose whichever bond ends up where.
+      const r1 = Math.ceil((this.rotation + 600 * dur / 3) / 120) * 120;
+      this.settle = { r0: this.rotation, r1, m0: this.circle, c0: this.comet, dur };
+      this.target = r1;
       this.setShape("settle");
     }
   }
@@ -60,7 +64,16 @@ export class MarkFeedback {
     if (value) { this.engaged = true; this.setStatus("working"); }
     else if (this.status === "working") this.setStatus("idle");
   }
-  finish() { this.engaged = true; this.setStatus("done"); }
+  finish() {
+    this.engaged = true;
+    this.setStatus("done");
+    if (this.shape === "bonds") this.target = Math.ceil(this.target / 120) * 120;
+  }
+  // The check waits for the bonds to all but stop: forming it from a spinning ring is a tangle.
+  private get resting() {
+    if (this.shape === "settle") return this.shapeT / this.settle.dur >= .75;
+    return this.shape === "bonds" && Math.abs(this.target - this.rotation) < .5;
+  }
 
   update(dt: number, animate: boolean) {
     if (!animate) {
@@ -76,8 +89,11 @@ export class MarkFeedback {
     const want = this.status === "done";
     if (want !== this.glyph) {
       this.done = Math.max(0, this.done - dt / .35);
-      if (this.done === 0) this.glyph = want;
-    } else if (want) this.done = Math.min(1, this.done + dt / .7);
+      if (this.done === 0) {
+        this.glyph = want;
+        this.turns = ((Math.round(this.target / 120) % 3) + 3) % 3;
+      }
+    } else if (want && this.resting) this.done = Math.min(1, this.done + dt / .8);
 
     switch (this.shape) {
       case "bonds": {
@@ -125,19 +141,24 @@ export class MarkFeedback {
         let d = (((th - 30) % 60) + 60) % 60;
         if (d > 30) d -= 60;
         const radius = lerp(INNER_RADIUS / Math.cos(d * DEG), INNER_RADIUS * .95, this.circle);
-        let x = radius * Math.cos(th * DEG), y = radius * Math.sin(th * DEG);
-        const index = section * 60 + i;
-        if (this.glyph && this.done > 0) {
-          const e = inOut(clamp01(this.done * 1.4 - index / GLYPH_POINTS * .4));
-          x = lerp(x, checkPoints[index]![0]! * INNER_RADIUS * 1.05, e);
-          y = lerp(y, checkPoints[index]![1]! * INNER_RADIUS * 1.05, e);
-        }
+        const x = radius * Math.cos(th * DEG), y = radius * Math.sin(th * DEG);
         const trail = (((this.rotation + 20 - th) % 360) + 360) % 360;
         const brightness = lerp(1, lerp(.3, 1, Math.exp(-trail / 75)), this.comet);
         points.push([x, y, brightness]);
       }
     }
-    return points;
+    if (!this.glyph) return points;
+    const scale = INNER_RADIUS * 1.05;
+    return CHECK_STRETCHES.flatMap(({ start, end, from, reversed }, stretch) => {
+      const section = (from + 3 - this.turns) % 3;
+      // Each lands just after the one before, so the check reads from left to right.
+      const e = inOut(span(this.done, stretch * .14, .72 + stretch * .14));
+      return Array.from({ length: 60 }, (_, i): BondPoint => {
+        const [x, y, brightness] = points[section * 60 + (reversed ? 59 - i : i)]!;
+        const t = i / 59;
+        return [lerp(x, lerp(start[0], end[0], t) * scale, e), lerp(y, lerp(start[1], end[1], t) * scale, e), brightness];
+      });
+    });
   }
 
   get animating() {

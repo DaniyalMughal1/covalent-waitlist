@@ -286,12 +286,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   const bondMaterial = metal.clone();
   bondMaterial.vertexColors = true;
   const bondGeometry = [new MarkRibbon(60), new MarkRibbon(60), new MarkRibbon(60)];
-  const bondMeshes = bondGeometry.map(geometry => new Mesh(geometry, bondMaterial));
-  object.add(...bondMeshes);
-  // At the completed glyph its three adjacent sections are one seamless stroke.
-  const joinedGeometry = new MarkRibbon(180);
-  const joinedMesh = new Mesh(joinedGeometry, bondMaterial);
-  object.add(joinedMesh);
+  object.add(...bondGeometry.map(geometry => new Mesh(geometry, bondMaterial)));
   let lastShape = "";
   scene.add(object);
 
@@ -380,13 +375,8 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     if (shape !== lastShape) {
       lastShape = shape;
       const points = feedback.points();
-      const joined = feedback.done === 1;
-      joinedMesh.visible = joined;
-      if (joined) joinedGeometry.update(points);
-      bondMeshes.forEach((mesh, i) => {
-        mesh.visible = !joined;
-        if (!joined) bondGeometry[i]!.update(points.slice(i * 60, i * 60 + 60), i * .002);
-      });
+      // One depth step apart at this camera's range, so overlapping strokes never flicker.
+      bondGeometry.forEach((geometry, i) => geometry.update(points.slice(i * 60, i * 60 + 60), i * .03));
     }
 
     const sweep = smooth(clamp01(sweepAge / SWEEP));
@@ -647,7 +637,6 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     canvas.removeEventListener("webglcontextrestored", handleRestored);
     ringGeometry.dispose();
     bondGeometry.forEach(geometry => geometry.dispose());
-    joinedGeometry.dispose();
     bondMaterial.dispose();
     metal.dispose();
     shadowPlane.dispose();
