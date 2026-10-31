@@ -1,13 +1,11 @@
 ---
 import Base from "../layouts/Base.astro";
-import Header from "../components/Header.astro";
 import Hero from "../components/Hero.astro";
 import Poster from "../components/Poster.astro";
 ---
 
 <Base>
   <div id="top"></div>
-  <Header />
   <main id="main" tabindex="-1">
     <Hero />
     {/* Demo parked for the waitlist launch. Process.astro and its motion files are preserved. */}
@@ -18,7 +16,6 @@ import Poster from "../components/Poster.astro";
 
 <script>
   import "../scripts/waitlist";
-  import "../scripts/explore";
   import "../scripts/hero";
   // Restore the process import when the demo is added back to this page.
 </script>

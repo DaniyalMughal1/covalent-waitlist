@@ -31,11 +31,9 @@ const parts = (form: HTMLFormElement) => ({
 
 const isDone = (form: HTMLFormElement) => form.dataset.state === "accepted" || form.dataset.state === "confirm";
 
-// Behind the sticky header is not on screen: nobody can see it there.
-const headerBottom = () => document.querySelector("[data-site-header]")?.getBoundingClientRect().bottom ?? 0;
 const isOnScreen = (element: Element) => {
   const box = element.getBoundingClientRect();
-  return box.top >= headerBottom() && box.bottom <= window.innerHeight;
+  return box.top >= 0 && box.bottom <= window.innerHeight;
 };
 
 function setState(form: HTMLFormElement, state: FormState, message = "") {
@@ -186,21 +184,6 @@ for (const form of forms) {
       otherInput.value = input.value;
       if (other.dataset.state !== "idle") setState(other, "idle");
     }
-  });
-}
-
-// "Join the waitlist" links put the cursor in the hero field when it is on screen, and
-// otherwise take the visitor to the closing form.
-for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-focus-email]")) {
-  link.addEventListener("click", (event) => {
-    const hero = document.getElementById("join");
-    const final = document.getElementById("join-final");
-    if (!(hero instanceof HTMLFormElement) || !(final instanceof HTMLFormElement)) return;
-    event.preventDefault();
-    const form = isOnScreen(parts(hero).input) ? hero : final;
-    const { input, success } = parts(form);
-    if (form === final) form.scrollIntoView({ block: "center", behavior: motion.ambient ? "smooth" : "auto" });
-    (isDone(form) ? success : input).focus({ preventScroll: true });
   });
 }
 

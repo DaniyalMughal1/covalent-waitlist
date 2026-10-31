@@ -1,10 +1,10 @@
 # Covalent waitlist page
 
-The current private landing page has a minimal header, “Your agents. In sync.”
-hero with an interactive 3D mark and email form, and a closing “Good work has
-chemistry.” poster with a second form and the `covalent.` wordmark. The section
-backgrounds blend together. The middle demo, FAQ and Explore menu are parked;
-their source remains available for a future product site.
+The current private landing page has a “Your team. In sync.” hero with an
+interactive 3D mark and email form, and a closing “Good work has chemistry.”
+poster with a second form and the `covalent.` wordmark. The section backgrounds
+blend together. The middle demo and FAQ are parked; their source remains
+available for a future product site.
 
 Built with Astro 7, Three.js and one on-demand route, `POST /api/waitlist`.
 There is no Anime.js, GSAP, Motion or React. The Supabase signup adapter is implemented; connect a project using
@@ -73,12 +73,11 @@ src/lib/process-timeline.ts sceneAt(p): the whole scene as a pure function of pr
 src/lib/waitlist/           server boundary: validation, rate limit, providers, handler + tests
 src/pages/api/waitlist.ts   the on-demand route
 src/pages/waitlist/*.astro  result pages for signups sent without JavaScript
-src/components/             Header, Hero, Process, Questions, Poster, WaitlistForm, MotionToggle
+src/components/             Hero, Process, Questions, Poster, WaitlistForm
 src/scripts/waitlist.ts     form behaviour
 src/scripts/hero.ts         hero stage, input, lifecycle (imports no three)
 src/scripts/hero-scene.ts   the Three.js scene, a separate lazy chunk
 src/scripts/process.ts      parked demo animation (not imported by the landing page)
-src/scripts/explore.ts      header behaviour and the optional, currently hidden Explore panel
 src/scripts/motion.ts       reduced motion, the pause control's state
 src/scripts/density.ts      reports a move to a display with a different pixel ratio
 src/scripts/page.ts         onPage: setup and teardown across navigation
@@ -100,8 +99,6 @@ docs/ASSET-PROVENANCE.md    where each asset came from, including the fonts
   can see brings the page back to the form; a success never moves the page. The email is
   stored only in the configured signup destination, never in browser storage, logs, or a URL. Without JavaScript the form posts natively and
   the server redirects to a result page.
-- **Header "Join the waitlist".** Focuses the hero form if it is on screen, and otherwise
-  takes you to the closing form. Visitors never have to finish the story to sign up.
 - **Hero.** Readable copy and a real rendered poster arrive in the HTML. The 3D scene takes
   over only once it has drawn, and if WebGL is missing or lost the poster simply stays.
   Hover, drag, click and keyboard control the mark. Typing advances the inner bonds,

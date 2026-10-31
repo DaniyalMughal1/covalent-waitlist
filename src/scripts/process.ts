@@ -127,13 +127,7 @@ onPage(() => {
     compact = nextCompact;
     section!.dataset.scroll = String(!compact);
     section!.dataset.mode = compact ? "compact" : "scroll";
-    const header =
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          "--header-h",
-        ),
-      ) || 88;
-    top = section!.getBoundingClientRect().top + window.scrollY - header;
+    top = section!.getBoundingClientRect().top + window.scrollY;
     range = Math.max(1, section!.offsetHeight - pin.offsetHeight);
     scene?.resize();
     if (active) void loadScene();

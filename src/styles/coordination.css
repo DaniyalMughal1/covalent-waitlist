@@ -2,7 +2,6 @@
   position: relative;
   background: var(--paper);
   isolation: isolate;
-  scroll-margin-top: var(--header-h);
   overflow-anchor: none;
 }
 .coordination::before {
@@ -34,8 +33,8 @@
 }
 .coordination[data-scroll="true"] .coordination-pin {
   position: sticky;
-  top: var(--header-h);
-  height: calc(100svh - var(--header-h));
+  top: 0;
+  height: 100svh;
   min-height: 580px;
 }
 .coordination-heading {

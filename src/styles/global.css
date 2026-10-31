@@ -22,7 +22,6 @@
 
   --max: 1728px;
   --gutter: clamp(20px, 4.8vw, 96px);
-  --header-h: 88px;
   --section: clamp(72px, 9vw, 128px);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -30,10 +29,6 @@
   --hover: 180ms;
 
   color-scheme: light;
-}
-
-@media (max-width: 720px) {
-  :root { --header-h: 72px; }
 }
 
 *,
@@ -45,7 +40,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-padding-top: calc(var(--header-h) + 16px);
+  scroll-padding-top: 16px;
   /* Keep Safari rubber-band scrolling from exposing white beyond the dark footer. */
   overscroll-behavior-y: none;
 }
@@ -55,7 +50,7 @@ html {
 html:has(.poster), body:has(.poster) { background-color: var(--footer-edge); }
 body:has(.poster) > main { background: var(--paper); }
 
-/* data-instant: motion is paused (src/scripts/explore.ts). */
+/* data-instant: nothing may move on its own (src/scripts/motion.ts). */
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-instant]) { scroll-behavior: smooth; }
 }

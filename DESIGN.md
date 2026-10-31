@@ -4,10 +4,10 @@
 
 This section supersedes the earlier notes below wherever they differ.
 
-- Render only the minimal header, hero and closing poster. Keep the middle demo and
-  FAQ source, but do not render them or load the middle animation.
-- Header: only the waitlist CTA, with no brand wordmark or Explore control.
-- Hero: “Your agents. In sync.”, the email form and the interactive metal mark,
+- Render only the hero and closing poster. Keep the middle demo and FAQ source, but
+  do not render them or load the middle animation.
+- No header: the page opens directly on the hero.
+- Hero: “Your team. In sync.”, the email form and the interactive metal mark,
   positioned higher. No eyebrow, explanatory paragraph, captions or scroll cue.
 - Typing advances the inner bonds, deletion reverses them, and successful signup
   triggers the terminal-inspired completion mark.
@@ -36,8 +36,8 @@ plates sharing one plane), and the closing poster (two ribbons meeting at one po
 The page stays small. Header, hero, process, three questions, closing poster. No feature
 grid, pricing, testimonials or extra calls to action.
 
-Signing up never depends on the story. There is a form in the first viewport, a link in
-the header, and a form at the end.
+Signing up never depends on the story. There is a form in the first viewport and a form at
+the end.
 
 ## What may be said
 
@@ -80,8 +80,8 @@ Cobalt stays restrained. If it starts decorating things, it has stopped meaning 
 
 ## Layout
 
-`--max` 1728px, `--gutter` `clamp(20px, 4.8vw, 96px)`, `--header-h` 88px (72px at 720px and
-under), `--section` `clamp(72px, 9vw, 128px)`. Nothing in the page is a rounded card.
+`--max` 1728px, `--gutter` `clamp(20px, 4.8vw, 96px)`, `--section`
+`clamp(72px, 9vw, 128px)`. Nothing in the page is a rounded card.
 
 ## Hero
 
@@ -164,9 +164,8 @@ Only real links appear. `Privacy` and `Contact` show up when their values are se
 
 ## Explore
 
-`src/components/Header.astro`, `src/scripts/explore.ts`. A broad, shallow panel with three
-real anchors. It opens on click and keyboard, never hover alone. Escape closes it and
-returns focus to the trigger. The markup falls back to a plain link without JavaScript.
+Removed with the header. The last version is in git at `4cdfebd`
+(`src/components/Header.astro`, `src/scripts/explore.ts`).
 
 ## Forms
 
@@ -189,7 +188,7 @@ One owner per moving property.
 | Mark pose, bonds, light, resolution | `hero-scene.ts` frame loop |
 | Stage role, tab stop, hint, caption | `hero.ts` |
 | Everything in the process scene | `process.ts`, from `sceneAt(p)` |
-| Header, Explore panel, hover, form states | CSS |
+| Hover, form states | CSS |
 | Whether motion may run | `src/scripts/motion.ts` (`reduced`, `paused`, `ambient`) |
 | Page setup and teardown | `onPage` in `src/scripts/page.ts` |
 

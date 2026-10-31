@@ -26,3 +26,8 @@ export const motion = {
 };
 
 query.addEventListener("change", notify);
+
+// CSS reads this, so direct actions jump to their result when nothing may move.
+const syncInstant = () => document.documentElement.toggleAttribute("data-instant", !motion.ambient);
+motion.subscribe(syncInstant);
+syncInstant();
