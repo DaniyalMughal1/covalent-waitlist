@@ -45,6 +45,8 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   scroll-padding-top: calc(var(--header-h) + 16px);
+  /* Keep Safari rubber-band scrolling from exposing white beyond the dark footer. */
+  overscroll-behavior-y: none;
 }
 
 /* data-instant: motion is paused (src/scripts/explore.ts). */
