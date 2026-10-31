@@ -4,7 +4,7 @@ import type { MarkFeedback, BondPoint } from "../lib/mark-feedback";
 
 // Preserve the photographed outer ring. A small SVG animates the inner bonds if the
 // browser cannot run WebGL; both renderers read the same terminal-inspired state.
-export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feedback: MarkFeedback): HeroScene {
+export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feedback: MarkFeedback): HeroScene & { startAmbient(): void } {
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("viewBox", "0 0 1000 1000");
@@ -59,14 +59,17 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
     paths[3]!.style.opacity = joined ? "1" : "0";
   };
 
+  // Hold the captured first pose while WebGL loads. A separate idle animation here
+  // would be at a different angle when the live scene starts its own clock.
+  let ambient = false;
   let active = false, destroyed = false, frame = 0, last = 0, clock = 0;
   let x = 0, y = 0, targetX = 0, targetY = 0, dragX = 0, dragY = 0;
   let dragging = false, pulse = 0;
   const draw = () => {
-    const drift = motion.ambient ? Math.sin(clock * .75) * 3 : 0;
-    const yaw = x + (motion.ambient ? Math.sin(clock * .43) * 1.5 : 0);
-    const pitch = y + (motion.ambient ? Math.sin(clock * .57) : 0);
-    stage.style.transform = `perspective(1000px) translateY(${drift - pulse * 3}px) rotateX(${pitch}deg) rotateY(${yaw}deg)`;
+    const drift = ambient && motion.ambient ? Math.sin(clock * .75) * 3 : 0;
+    const yaw = x + (ambient && motion.ambient ? Math.sin(clock * .43) * 1.5 : 0);
+    const pitch = y + (ambient && motion.ambient ? Math.sin(clock * .57) : 0);
+    stage.style.transform = drift || pulse || pitch || yaw ? `perspective(1000px) translateY(${drift - pulse * 3}px) rotateX(${pitch}deg) rotateY(${yaw}deg)` : "";
     renderBonds();
   };
   const schedule = () => { if (active && !destroyed && !frame) frame = requestAnimationFrame(tick); };
@@ -74,16 +77,17 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
     frame = 0;
     const dt = last ? Math.min((now - last) / 1000, .05) : 1 / 60;
     last = now;
-    if (motion.ambient) clock += dt;
+    if (ambient && motion.ambient) clock += dt;
     feedback.update(dt, motion.ambient);
     const gain = motion.ambient ? 1 - Math.exp(-dt * 9) : 1;
     x += (targetX - x) * gain; y += (targetY - y) * gain;
     pulse *= Math.exp(-dt * 4);
     draw();
-    if (motion.ambient || Math.abs(x - targetX) + Math.abs(y - targetY) + pulse > .005) schedule();
+    if ((motion.ambient && (ambient || feedback.engaged)) || Math.abs(x - targetX) + Math.abs(y - targetY) + pulse > .005) schedule();
   };
   const reset = () => { targetX = targetY = 0; dragging = false; schedule(); };
   return {
+    startAmbient() { ambient = true; schedule(); },
     reveal() { poster.style.visibility = ""; poster.style.opacity = ""; svg.style.visibility = ""; draw(); schedule(); },
     setActive(value) {
       active = value; last = 0;

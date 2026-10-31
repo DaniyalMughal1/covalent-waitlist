@@ -230,7 +230,7 @@ onPage(() => {
     // Asked for here rather than by three, so a browser without WebGL downloads nothing.
     try {
       const gl = canvas.getContext("webgl2", CONTEXT);
-      if (!gl) return;
+      if (!gl) { fallback.startAmbient(); return; }
       const { createHeroScene } = await import("./hero-scene");
       if (signal.aborted) return;
       stage.append(canvas);
@@ -246,6 +246,7 @@ onPage(() => {
           queueMicrotask(() => { gpuScene?.destroy(); gpuScene = undefined; canvas.remove(); });
           scene = fallback;
           stage.dataset.renderer = "poster";
+          fallback.startAmbient();
           fallback.reveal();
           upgrade();
           syncActive();
@@ -282,9 +283,11 @@ onPage(() => {
       scene.reveal();
       syncActive();
     } catch {
+      if (signal.aborted) return;
       canvas.remove();
       scene = fallback;
       stage.dataset.renderer = "poster";
+      fallback.startAmbient();
       fallback.reveal();
       upgrade();
       syncActive();
