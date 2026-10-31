@@ -5,16 +5,21 @@ import Poster from "../components/Poster.astro";
 ---
 
 <Base>
-  <div id="top"></div>
-  <main id="main" tabindex="-1">
-    <Hero />
-    {/* Demo parked for the waitlist launch. Process.astro and its motion files are preserved. */}
-    {/* FAQ parked for now; Questions.astro and its copy are preserved. */}
-  </main>
-  <Poster />
+  <div id="smooth-wrapper">
+    <div id="smooth-content">
+      <div id="top"></div>
+      <main id="main" tabindex="-1">
+        <Hero />
+        {/* Demo parked for the waitlist launch. Process.astro and its motion files are preserved. */}
+        {/* FAQ parked for now; Questions.astro and its copy are preserved. */}
+      </main>
+      <Poster />
+    </div>
+  </div>
 </Base>
 
 <script>
+  import "../scripts/smooth-scroll";
   import "../scripts/waitlist";
   import "../scripts/hero";
   // Restore the process import when the demo is added back to this page.

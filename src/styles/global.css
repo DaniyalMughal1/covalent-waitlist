@@ -48,12 +48,14 @@ html {
 /* Continue the footer color into Safari's bottom inset and overscroll canvas.
    The content keeps its own paper surface; the artwork's geometry is unchanged. */
 html:has(.poster), body:has(.poster) { background-color: var(--footer-edge); }
-body:has(.poster) > main { background: var(--paper); }
+body:has(.poster) main { background: var(--paper); }
 
 /* data-instant: nothing may move on its own (src/scripts/motion.ts). */
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-instant]) { scroll-behavior: smooth; }
 }
+/* ScrollSmoother does the easing itself; CSS smoothing on top would fight it. */
+html.has-smoother { scroll-behavior: auto; }
 
 body {
   margin: 0;

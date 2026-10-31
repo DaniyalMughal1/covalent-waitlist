@@ -4,7 +4,7 @@
 import { attributionFromUrl } from "../lib/waitlist/attribution";
 import { copy, messages } from "../config/site";
 import { normalizeEmail } from "../lib/waitlist/validate";
-import { motion } from "./motion";
+import { scrollToElement } from "./smooth-scroll";
 
 export type FormState = "idle" | "invalid" | "submitting" | "accepted" | "confirm" | "failed";
 export interface WaitlistStateDetail {
@@ -148,7 +148,7 @@ async function submit(form: HTMLFormElement) {
   const text = status === "rate_limited" ? messages.rateLimited : messages.failure;
   holding.forEach((other) => setState(other, "failed", text));
   if (!typing && !holding.some((other) => isOnScreen(parts(other).status))) {
-    form.scrollIntoView({ block: "center", behavior: motion.ambient ? "smooth" : "auto" });
+    scrollToElement(form, "center");
   }
 }
 

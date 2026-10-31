@@ -191,8 +191,12 @@ One owner per moving property.
 | Hover, form states | CSS |
 | Whether motion may run | `src/scripts/motion.ts` (`reduced`, `paused`, `ambient`) |
 | Page setup and teardown | `onPage` in `src/scripts/page.ts` |
+| Eased page scrolling | `src/scripts/smooth-scroll.ts` (GSAP ScrollSmoother) |
 
-Anime.js is gone. No GSAP, Motion or React. Three.js exists only in the lazy hero chunk.
+Anime.js is gone. No Motion or React. Three.js exists only in the lazy hero chunk.
+GSAP is used only for ScrollSmoother page scrolling (`src/scripts/smooth-scroll.ts`); it is
+off under reduced motion and on touch. In-page links and `scrollIntoView` go through its
+`scrollToElement` helper, since the content sits in a fixed wrapper.
 
 The pause control shows while a surface with `data-motion-live` is on screen, and never
 under reduced motion. A hero left on its poster sets no such flag, so it offers nothing to

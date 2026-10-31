@@ -17,6 +17,7 @@
     "@astrojs/node": "11.1.9",
     "@astrojs/vercel": "11.0.17",
     "astro": "7.4.4",
+    "gsap": "3.15.0",
     "three": "0.180.0"
   },
   "devDependencies": {
