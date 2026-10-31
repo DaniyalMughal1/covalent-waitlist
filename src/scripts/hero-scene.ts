@@ -45,7 +45,7 @@ const CAMERA_DISTANCE = 652;
 // YXZ order: yaw last, so the top edge stays level in the frame however far it pitches.
 const REST = { yaw: -18 * DEG, pitch: -9 * DEG };
 
-const AMBIENT = { lift: 0.8, yaw: 0.7 * DEG, pitch: 0.5 * DEG };
+const AMBIENT = { lift: 6, yaw: 4 * DEG, pitch: 2.5 * DEG };
 const HOVER_TILT = 8 * DEG;
 const DRAG_TILT = { yaw: 19 * DEG, pitch: 15 * DEG };
 const DRAG_RANGE = 240; // px of travel that uses up most of the bounded tilt
@@ -357,23 +357,25 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
 
   // Spreads and lightens a touch as the mark lifts, and thins as it leans.
   const drawShadow = (strength: number) => {
-    const lift = object.position.y / (compact ? 1.6 : AMBIENT.lift); // -1..1 through the drift
+    const lift = object.position.y / (compact ? 8 : AMBIENT.lift); // -1..1 through the drift
     const leaning = Math.abs(tiltYaw.x) + Math.abs(tiltPitch.x) + Math.abs(tip.x);
-    shadow.position.x = tiltYaw.x * 62;
+    shadow.position.x = tiltYaw.x * 62 + object.position.x;
     shadow.scale.set(
-      SHADOW.x * (1 + 0.012 * lift) * (1 - 0.1 * Math.min(1, Math.abs(tiltYaw.x) / DRAG_TILT.yaw)),
-      SHADOW.y * (1 + 0.018 * lift + 0.5 * Math.sin(Math.abs(tip.x))),
+      SHADOW.x * (1 + 0.04 * lift) * (1 - 0.1 * Math.min(1, Math.abs(tiltYaw.x) / DRAG_TILT.yaw)),
+      SHADOW.y * (1 + 0.06 * lift + 0.5 * Math.sin(Math.abs(tip.x))),
       1,
     );
-    shadowMaterial.opacity = strength * SHADOW.alpha * (1 - 0.05 * lift - 0.35 * Math.min(1, leaning));
+    shadowMaterial.opacity = strength * SHADOW.alpha * (1 - 0.08 * lift - 0.35 * Math.min(1, leaning));
   };
 
   const pose = () => {
-    const a = Math.sin(Math.min(clock / 2.4, 1) * (Math.PI / 2)) ** 2 * ambientGain; // ambient eases in from nothing
+    const a = Math.sin(Math.min(clock / 1.6, 1) * (Math.PI / 2)) ** 2 * ambientGain; // ambient eases in from nothing
     const t = clock * Math.PI * 2;
-    object.position.y = (compact ? 1.6 : AMBIENT.lift) * a * Math.sin(t / 9);
-    object.rotation.y = REST.yaw + tiltYaw.x + (compact ? 2.5 * DEG : AMBIENT.yaw) * a * Math.sin(t / 11.3);
-    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + (compact ? 1.5 * DEG : AMBIENT.pitch) * a * Math.sin(t / 8.3);
+    object.position.x = 1.8 * a * Math.sin(t / 9.7);
+    object.rotation.z = 1.4 * DEG * a * Math.sin(t / 8.1);
+    object.position.y = (compact ? 8 : AMBIENT.lift) * a * Math.sin(t / 6.8);
+    object.rotation.y = REST.yaw + tiltYaw.x + (compact ? 5 * DEG : AMBIENT.yaw) * a * Math.sin(t / 11.3);
+    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + (compact ? 3 * DEG : AMBIENT.pitch) * a * Math.sin(t / 8.3);
     const shape = `${feedback.rotation}/${feedback.circle}/${feedback.done}/${feedback.comet}`;
     if (shape !== lastShape) {
       lastShape = shape;

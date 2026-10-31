@@ -68,10 +68,13 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
   let x = 0, y = 0, targetX = 0, targetY = 0, dragX = 0, dragY = 0;
   let dragging = false, pulse = 0;
   const draw = () => {
-    const drift = ambient && motionAllowed ? Math.sin(clock * .75) * 3 : 0;
-    const yaw = x + (ambient && motionAllowed ? Math.sin(clock * .43) * 1.5 : 0);
-    const pitch = y + scrollTip + (ambient && motionAllowed ? Math.sin(clock * .57) : 0);
-    stage.style.transform = drift || pulse || pitch || yaw ? `perspective(1000px) translateY(${drift - pulse * 3}px) rotateX(${pitch}deg) rotateY(${yaw}deg)` : "";
+    const gain = ambient && motionAllowed ? Math.sin(Math.min(clock / 1.6, 1) * Math.PI / 2) ** 2 : 0;
+    const drift = Math.sin(clock * .924) * 12 * gain;
+    const sway = Math.sin(clock * .648) * 3 * gain;
+    const roll = Math.sin(clock * .776) * 1.4 * gain;
+    const yaw = x + Math.sin(clock * .556) * 5 * gain;
+    const pitch = y + scrollTip + Math.sin(clock * .757) * 3 * gain;
+    stage.style.transform = drift || sway || roll || pulse || pitch || yaw ? `perspective(1000px) translate(${sway}px, ${-drift - pulse * 3}px) rotateX(${pitch}deg) rotateY(${yaw}deg) rotateZ(${roll}deg)` : "";
     renderBonds();
   };
   const schedule = () => { if (active && !destroyed && !frame) frame = requestAnimationFrame(tick); };
