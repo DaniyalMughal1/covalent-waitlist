@@ -40,6 +40,13 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
   stage.append(svg);
   const pathData = (points: readonly BondPoint[]) => points.map(([x, y], i) => `${i ? "L" : "M"}${project(x!, y!).map(v => v.toFixed(2)).join(" ")}`).join("");
   const renderBonds = () => {
+    // Keep the complete rendered mark during loading or a GPU failure. The SVG
+    // replacement is only needed once an interaction changes the inner bonds.
+    if (!feedback.engaged) {
+      svg.style.opacity = "0";
+      poster.style.clipPath = "";
+      return;
+    }
     svg.style.opacity = "1";
     poster.style.clipPath = "url(#hero-bond-cutout)";
     const points = feedback.points();
