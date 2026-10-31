@@ -29,6 +29,7 @@ import markPoster from "../assets/mark-poster.png";
         fetchpriority="high"
       />
     </div>
+    <button class="hero-tilt" data-hero-tilt type="button" aria-pressed="false" hidden>Enable tilt</button>
   </div>
 
 </section>
@@ -107,6 +108,21 @@ import markPoster from "../assets/mark-poster.png";
     justify-content: center;
     min-width: 0;
   }
+
+  .hero-tilt {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    min-height: 44px;
+    padding: 8px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .hero-tilt[aria-pressed="true"] { color: var(--ink); }
+  .hero-tilt:disabled { opacity: .6; cursor: default; }
 
   /* Stable square: the poster and the canvas share it, so neither can shift the layout. */
   .hero-stage {
