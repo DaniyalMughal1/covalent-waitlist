@@ -66,16 +66,21 @@ import { copy, site } from "../config/site";
   .poster-links a:hover { text-decoration: underline; text-underline-offset: 4px; }
   @media (max-width: 900px) { .poster-frame { height: 900px; } .poster-wordmark { bottom: 100px; } }
   @media (max-width: 600px) {
-    .poster-frame { height: 810px; }
-    .poster-invite { margin-left: 6vw; margin-right: 6vw; padding-top: 45px; }
+    .poster-frame {
+      height: auto; min-height: 700px;
+      display: flex; flex-direction: column;
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+    .poster-invite { margin-left: 6vw; margin-right: 6vw; padding-top: 45px; margin-bottom: 150px; }
     .poster-title { font-size: clamp(40px, 13.3vw, 66px); }
     .poster-invite :global(.poster-form) { max-width: min(300px, 100%); }
-    .poster-art :global(img) { object-fit: none; height: 670px; width: auto; max-width: none; position: absolute;
-      bottom: 0; left: 54%; transform: translateX(-54%); }
+    .poster-art { transform: none; }
+    .poster-art :global(img) { width: 100%; height: 100%; object-fit: cover; object-position: 54% bottom; }
     .poster-art::after { background: linear-gradient(to bottom, #f8f6f1 0%, #f8f6f1 37%, rgba(248,246,241,.95) 46%, rgba(248,246,241,0) 64%),
       linear-gradient(to top, rgba(8,13,22,.5), transparent 40%); }
-    .poster-wordmark { font-size: 24vw; left: 4vw; bottom: 122px; }
-    .poster-baseline { bottom: 68px; left: 6vw; right: 6vw; font-size: 11px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    /* Keep these in flow: the tagline follows the glyphs even when text wraps or grows. */
+    .poster-wordmark { position: relative; inset: auto; margin: auto 4vw 26px; font-size: 23.5vw; line-height: .95; }
+    .poster-baseline { position: relative; inset: auto; margin-inline: 6vw; font-size: 11px; flex-direction: column; align-items: flex-start; gap: 8px; }
   }
   @media (forced-colors: active) { .poster-art { display: none; } .poster-wordmark, .poster-baseline { color: CanvasText; } }
 </style>
