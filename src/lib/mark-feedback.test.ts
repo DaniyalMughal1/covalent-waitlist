@@ -2,6 +2,48 @@ import { describe, expect, it } from "vitest";
 import { INNER_RADIUS, MarkFeedback, type BondPoint } from "./mark-feedback";
 const advance = (mark: MarkFeedback, seconds: number) => { for (let i = 0; i < seconds * 60; i++) mark.update(1 / 60, true); };
 describe("terminal logo feedback", () => {
+  it("reveals the solid, staggers bars, and makes one coordinated movement", () => {
+    const mark = new MarkFeedback();
+    mark.startArrival(true);
+    expect(mark.draw).toBe(0);
+    expect(mark.arrivalScale).toBe(.97);
+    mark.update(.225, true);
+    expect(mark.draw).toBeCloseTo(.5);
+    expect(mark.bondGrowth(0)).toBe(0);
+    mark.update(.225, true);
+    expect(mark.draw).toBe(1);
+    expect(mark.arrivalScale).toBe(1);
+    expect(mark.bondGrowth(0)).toBeGreaterThan(mark.bondGrowth(1));
+    expect(mark.bondGrowth(1)).toBeGreaterThan(mark.bondGrowth(2));
+    mark.update(.5, true);
+    expect(mark.bondGrowth(2)).toBe(1);
+    mark.update(.325, true);
+    expect(mark.rotation).toBeCloseTo(60);
+    advance(mark, 1);
+    expect(mark.target).toBe(120);
+    expect(mark.rotation).toBe(120);
+    expect(mark.animating).toBe(false);
+    mark.startArrival(true);
+    expect(mark.draw).toBe(1);
+  });
+  it("lets edits interrupt startup without later greeting hops", () => {
+    const mark = new MarkFeedback();
+    mark.startArrival(true);
+    mark.update(.3, true);
+    mark.hop(-1);
+    advance(mark, 4);
+    expect(mark.draw).toBe(1);
+    expect(mark.bondGrow).toBe(1);
+    expect(mark.target).toBe(-60);
+  });
+  it("skips startup for reduced motion", () => {
+    const mark = new MarkFeedback();
+    mark.startArrival(false);
+    advance(mark, 4);
+    expect(mark.draw).toBe(1);
+    expect(mark.bondGrow).toBe(1);
+    expect(mark.target).toBe(0);
+  });
   it("hops sixty degrees per edit without jumping at high typing speeds", () => {
     const mark = new MarkFeedback();
     for (let i = 0; i < 30; i++) mark.hop();

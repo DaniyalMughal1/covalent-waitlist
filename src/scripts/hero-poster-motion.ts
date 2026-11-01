@@ -99,7 +99,13 @@ export function createPosterMotion(stage: HTMLElement, poster: HTMLElement, feed
   };
   const reset = () => { targetX = targetY = 0; dragging = false; schedule(); };
   return {
-    startAmbient() { ambient = true; scrollDirty = true; schedule(); },
+    startAmbient() {
+      // A GPU failure should immediately show a complete photographed mark.
+      feedback.update(0, false);
+      feedback.startArrival(false);
+      delete stage.dataset.arrivalPending;
+      ambient = true; scrollDirty = true; draw(); schedule();
+    },
     reveal() { poster.style.visibility = ""; poster.style.opacity = ""; svg.style.visibility = ""; draw(); schedule(); },
     setActive(value) {
       active = value; last = 0;

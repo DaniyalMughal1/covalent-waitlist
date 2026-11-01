@@ -16,6 +16,11 @@ import markPoster from "../assets/mark-poster.png";
 
   <div class="hero-object">
     <div class="hero-stage" data-hero-stage data-motion-surface>
+      <script is:inline>
+        // Hide only the static poster while the first complete animated frame prepares.
+        // Without JavaScript the original image remains visible.
+        document.currentScript.parentElement.dataset.arrivalPending = "";
+      </script>
       <Picture
         class="hero-poster"
         src={markPoster}
@@ -128,6 +133,9 @@ import markPoster from "../assets/mark-poster.png";
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  .hero-stage[data-arrival-pending] :global(.hero-poster) {
+    visibility: hidden;
   }
   .hero-stage[data-dragging] {
     cursor: grabbing;

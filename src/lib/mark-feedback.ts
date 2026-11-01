@@ -30,6 +30,11 @@ export class MarkFeedback {
   comet = 0;
   status: "idle" | "working" | "done" = "idle";
   engaged = false;
+  draw = 1;
+  bondGrow = 1;
+  private arrivalAge = 0;
+  private arriving = false;
+  private arrivalStarted = false;
   private shape: Shape = "bonds";
   private shapeT = 0;
   private swingFrom = 0;
@@ -37,7 +42,27 @@ export class MarkFeedback {
   private turns = 0; // thirds of a turn made when the check began, so which bond sits where
   private settle = { r0: 0, r1: 0, m0: 0, c0: 0, dur: .9 };
 
+  startArrival(animate: boolean) {
+    if (this.arrivalStarted || this.engaged) return;
+    this.arrivalStarted = true;
+    if (!animate) return;
+    this.arriving = true;
+    this.draw = this.bondGrow = 0;
+  }
+
+  private endArrival() {
+    this.arriving = false;
+    this.draw = this.bondGrow = 1;
+  }
+
+  get arrivalScale() { return this.arriving ? .97 + .03 * outCubic(span(this.arrivalAge, 0, .45)) : 1; }
+  get arrivalLift() { return this.arriving ? -4 * (1 - outCubic(span(this.arrivalAge, 0, .45))) : 0; }
+  bondGrowth(section: number) {
+    return this.arriving ? outCubic(span(this.arrivalAge, .36 + section * .07, .76 + section * .07)) : 1;
+  }
+
   hop(direction = 1) {
+    this.endArrival();
     this.engaged = true;
     this.setStatus("idle");
     if (this.shape === "bonds") this.target += 60 * direction;
@@ -61,10 +86,12 @@ export class MarkFeedback {
     }
   }
   setWorking(value: boolean) {
+    if (value) this.endArrival();
     if (value) { this.engaged = true; this.setStatus("working"); }
     else if (this.status === "working") this.setStatus("idle");
   }
   finish() {
+    this.endArrival();
     this.engaged = true;
     this.setStatus("done");
     if (this.shape === "bonds") this.target = Math.ceil(this.target / 120) * 120;
@@ -77,6 +104,7 @@ export class MarkFeedback {
 
   update(dt: number, animate: boolean) {
     if (!animate) {
+      this.endArrival();
       this.rotation = this.target;
       this.circle = this.status === "working" ? 1 : 0;
       this.comet = this.circle;
@@ -84,6 +112,16 @@ export class MarkFeedback {
       this.glyph = this.done === 1;
       this.setShape(this.status === "working" ? "circle" : "bonds");
       return;
+    }
+    if (this.arriving) {
+      this.arrivalAge += dt;
+      this.draw = inOut(span(this.arrivalAge, 0, .45));
+      this.bondGrow = outCubic(span(this.arrivalAge, .36, .9));
+      if (this.arrivalAge >= .95) this.target = 120;
+      if (this.arrivalAge >= 1.6) {
+        this.rotation = this.target = 120;
+        this.endArrival();
+      }
     }
     this.shapeT += dt;
     const want = this.status === "done";
@@ -97,6 +135,10 @@ export class MarkFeedback {
 
     switch (this.shape) {
       case "bonds": {
+        if (this.arriving) {
+          this.rotation = 120 * inOut(span(this.arrivalAge, .95, 1.6));
+          break;
+        }
         const step = (this.target - this.rotation) * (1 - Math.exp(-dt * 16));
         this.rotation += Math.sign(step) * Math.min(Math.abs(step), 900 * dt);
         if (Math.abs(this.target - this.rotation) < .01) this.rotation = this.target;
@@ -132,9 +174,9 @@ export class MarkFeedback {
   }
 
   points(): BondPoint[] {
-    const width = lerp(40, 121, this.circle);
     const points: BondPoint[] = [];
     for (let section = 0; section < 3; section++) {
+      const width = lerp(40 * this.bondGrowth(section), 121, this.circle);
       const centre = [270, 30, 150][section]! + this.rotation;
       for (let i = 0; i < 60; i++) {
         const th = centre - width / 2 + width * i / 59;
@@ -162,7 +204,7 @@ export class MarkFeedback {
   }
 
   get animating() {
-    return this.shape !== "bonds" || Math.abs(this.target - this.rotation) > .01 ||
+    return this.arriving || this.shape !== "bonds" || Math.abs(this.target - this.rotation) > .01 ||
       (this.status === "done" ? this.done < 1 : this.done > 0);
   }
 }

@@ -280,13 +280,17 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   });
 
   const ringGeometry = toGeometry(buildRing());
+  // Fade the complete solid into view; never expose sliced metal edges.
+  const ringMaterial = metal.clone();
+  ringMaterial.transparent = true;
   const object = new Group();
   object.rotation.order = "YXZ";
-  object.add(new Mesh(ringGeometry, metal));
+  object.add(new Mesh(ringGeometry, ringMaterial));
   const bondMaterial = metal.clone();
   bondMaterial.vertexColors = true;
   const bondGeometry = [new MarkRibbon(60), new MarkRibbon(60), new MarkRibbon(60)];
-  object.add(...bondGeometry.map(geometry => new Mesh(geometry, bondMaterial)));
+  const bonds = bondGeometry.map(geometry => new Mesh(geometry, bondMaterial));
+  object.add(...bonds);
   let lastShape = "";
   scene.add(object);
 
@@ -364,14 +368,18 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   };
 
   const pose = () => {
-    const a = Math.sin(Math.min(clock / 1.6, 1) * (Math.PI / 2)) ** 2 * ambientGain; // ambient eases in from nothing
+    ringMaterial.opacity = feedback.draw;
+    object.scale.setScalar(feedback.arrivalScale);
+    bonds.forEach((bond, i) => { bond.visible = feedback.bondGrowth(i) > .001; });
+    // Keep one continuous float through the reveal, bar movement, and idle state.
+    const a = ambientGain;
     const t = clock * Math.PI * 2;
     object.position.x = 1.8 * a * Math.sin(t / 9.7);
     object.rotation.z = 1.4 * DEG * a * Math.sin(t / 8.1);
-    object.position.y = (compact ? 8 : AMBIENT.lift) * a * Math.sin(t / 6.8);
+    object.position.y = feedback.arrivalLift + (compact ? 8 : AMBIENT.lift) * a * Math.sin(t / 6.8);
     object.rotation.y = REST.yaw + tiltYaw.x + (compact ? 5 * DEG : AMBIENT.yaw) * a * Math.sin(t / 11.3);
     object.rotation.x = REST.pitch + tiltPitch.x + tip.x + (compact ? 3 * DEG : AMBIENT.pitch) * a * Math.sin(t / 8.3);
-    const shape = `${feedback.rotation}/${feedback.circle}/${feedback.done}/${feedback.comet}`;
+    const shape = `${feedback.rotation}/${feedback.circle}/${feedback.done}/${feedback.comet}/${feedback.bondGrow}`;
     if (shape !== lastShape) {
       lastShape = shape;
       const points = feedback.points();
@@ -388,7 +396,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   const draw = () => {
     pose();
     const strength = phase === "live" ? 1 : phase === "reveal" ? smooth(clamp01(phaseAge / REVEAL)) : 0;
-    drawShadow(strength);
+    drawShadow(strength * feedback.draw);
     renderer.render(scene, camera);
   };
 
@@ -636,6 +644,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     canvas.removeEventListener("webglcontextlost", handleLost);
     canvas.removeEventListener("webglcontextrestored", handleRestored);
     ringGeometry.dispose();
+    ringMaterial.dispose();
     bondGeometry.forEach(geometry => geometry.dispose());
     bondMaterial.dispose();
     metal.dispose();
@@ -662,7 +671,7 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     ? {
         debug: () => ({
           phase,
-          feedback: { rotation: feedback.rotation, target: feedback.target, circle: feedback.circle, done: feedback.done, status: feedback.status },
+          feedback: { rotation: feedback.rotation, target: feedback.target, circle: feedback.circle, done: feedback.done, status: feedback.status, draw: feedback.draw, bondGrow: feedback.bondGrow },
           clock,
           rate,
           sweepAge,
@@ -713,11 +722,13 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
 
     reveal() {
       if (phase !== "hold") return;
+      feedback.startArrival(ambient);
       // Swap only after a complete frame exists. Two semi-transparent, differently lit
       // copies of the mark used to overlap here and the moving poster snapped to rest.
       phase = "live";
       draw();
       setPhase("live");
+      delete stage.dataset.arrivalPending;
       invalidate();
     },
 
