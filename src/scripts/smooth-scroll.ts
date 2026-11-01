@@ -1,5 +1,5 @@
 // Eased page scrolling with GSAP ScrollSmoother. The page keeps its native scroll
-// position, so scroll listeners keep working; only what's drawn trails behind it.
+// position; visual-scroll also tracks the content while it glides after native scroll ends.
 // Off under reduced motion and on touch, where native scrolling feels best.
 //
 // The content sits in a fixed wrapper, so the browser can no longer jump to an element
@@ -14,6 +14,7 @@ gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
 
 const root = document.documentElement;
 let smoother: ScrollSmoother | undefined;
+const notifyVisualScroll = () => window.dispatchEvent(new Event("covalent:visual-scroll"));
 
 /** Scroll an element into view, eased when the smoother is running. */
 export function scrollToElement(element: Element, block: "start" | "center" = "start") {
@@ -57,6 +58,8 @@ onPage(() => {
         smooth: 1.1,
         smoothTouch: false,
         effects: false,
+        onUpdate: notifyVisualScroll,
+        onStop: notifyVisualScroll,
       });
       root.classList.add("has-smoother");
     } else if (!motion.ambient && smoother) {

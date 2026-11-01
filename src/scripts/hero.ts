@@ -208,6 +208,7 @@ onPage(() => {
   );
 
   window.addEventListener("scroll", () => scene?.scrolled(), { passive: true, signal });
+  window.addEventListener("covalent:visual-scroll", () => scene?.scrolled(), { signal });
 
   const syncActive = () => {
     const visible = onScreen && !document.hidden;
