@@ -1,12 +1,21 @@
-// The mark responds immediately through a light image transform. A ready WebGL scene
-// replaces it, and a lost or unavailable context returns to that interactive fallback.
+// The hero: the Covalent ring over a faint honeycomb of benzene rings. As the page
+// arrives, two waves from the ring raise the honeycomb and then lay it flat again;
+// afterwards the cursor brings it up wherever it moves. Typing hops the ring's inner bonds, deleting
+// turns them back, a pending signup spins them into a ring, and an accepted one brings
+// the whole ring into view and forms a check. The ring is decorative; the form is the
+// only thing to interact with.
+//
+// One frame loop here advances the ring's state (hero-mark.ts) and hands it to whichever
+// renderer is showing: the glass in WebGL (hero-scene.ts), or the page's own flat SVG
+// ring (hero-flat-ring.ts) where WebGL can't run.
 import { motion } from "./motion";
 import { MarkFeedback } from "../lib/mark-feedback";
-import { createPosterMotion } from "./hero-poster-motion";
+import { createMarkController, ringBox } from "./hero-mark";
+import { createFlatRings } from "./hero-flat-ring";
 import { onPage } from "./page";
 import type { HeroScene } from "./hero-scene";
 
-const DRAG_THRESHOLD = 6;
+const MAX_DT = 1 / 20;
 const CONTEXT: WebGLContextAttributes = {
   alpha: true,
   antialias: true,
@@ -14,182 +23,180 @@ const CONTEXT: WebGLContextAttributes = {
   stencil: false,
   powerPreference: "low-power",
 };
+// The page's own honeycomb starts its CSS waves this long after load (Hero.astro). WebGL
+// that is ready before then runs the waves itself.
+const CSS_RIPPLE_DELAY = 900;
 
 onPage(() => {
-  const stage = document.querySelector<HTMLElement>("[data-hero-stage]");
-  const poster = stage?.querySelector<HTMLImageElement>("img");
-  if (!stage || !poster) return;
+  const hero = document.querySelector<HTMLElement>(".hero");
+  const field = document.querySelector<HTMLElement>("[data-hero-field]");
+  const lattice = document.querySelector<SVGSVGElement>("svg[data-lattice]");
+  const svgs = [...document.querySelectorAll<SVGSVGElement>("svg[data-ring]")];
+  if (!hero || !field || !svgs.length) return;
 
   const stopping = new AbortController();
   const { signal } = stopping;
-  const canvas = document.createElement("canvas");
-  canvas.setAttribute("aria-hidden", "true");
-  canvas.style.opacity = "0";
+  const desktop = window.matchMedia("(min-width: 1000px)");
+  const wide = svgs.find((svg) => svg.dataset.ring === "wide");
+  const compact = svgs.find((svg) => svg.dataset.ring === "compact");
+  const layoutRing = () => (desktop.matches ? wide : compact);
 
   const feedback = new MarkFeedback();
-  const fallback = createPosterMotion(stage, poster, feedback);
-  let scene: HeroScene = fallback;
-  let gpuScene: HeroScene | undefined;
-  let interactive = false;
-  let onScreen = false;
-  const hoverDevice = window.matchMedia("(hover: hover) and (pointer: fine)");
+  const flat = createFlatRings(svgs);
+  const ctrl = createMarkController(feedback, wide, desktop, () => schedule());
 
-  // Pointer input. A press only becomes a drag past the threshold, and a drag is never a click.
-  interface Press {
-    id: number;
-    x: number;
-    y: number;
-  }
-  let press: Press | undefined;
-  let dragging = false;
-  let dragged = false;
+  // The wave clears the honeycomb from the ring outward, wherever the ring is.
+  const aimRipple = () => {
+    const box = ringBox(layoutRing());
+    const area = field.getBoundingClientRect();
+    if (!lattice || !box || !area.width) return;
+    lattice.style.setProperty("--cx", `${box.cx - area.left}px`);
+    lattice.style.setProperty("--cy", `${box.cy - area.top}px`);
+  };
+  aimRipple();
 
-  const endPress = () => {
-    press = undefined;
-    if (!dragging) return;
-    dragging = false;
-    delete stage.dataset.dragging;
-    scene?.dragEnd();
+  // ---- WebGL ----
+  let scene: HeroScene | undefined;
+  let canvas: HTMLCanvasElement | undefined;
+  const noGl = import.meta.env.DEV && new URLSearchParams(location.search).has("nogl");
+
+  const useFlat = () => {
+    flat.setState("shown");
+    flat.draw(feedback);
   };
 
-  const upgrade = () => {
-    interactive = true;
-    stage.setAttribute("role", "button");
-    stage.tabIndex = 0;
-    stage.setAttribute("aria-label", "Move the Covalent mark");
-    stage.dataset.interactive = "";
-    stage.dataset.motionLive = "";
+  const dropGl = () => {
+    const gone = scene;
+    scene = undefined;
+    useFlat();
+    // Whatever the honeycomb was doing, it is over: the page's copy has long finished.
+    if (lattice) lattice.dataset.hidden = "";
+    // A lost GPU stays on the flat ring for this visit; no flashing retries.
+    queueMicrotask(() => {
+      gone?.destroy();
+      canvas?.remove();
+      canvas = undefined;
+    });
   };
 
-  const downgrade = () => {
-    endPress();
-    interactive = false;
-    stage.removeAttribute("role");
-    // No longer a tab stop either way, but removing the attribute would blur a focused stage.
-    if (document.activeElement === stage) stage.tabIndex = -1;
-    else stage.removeAttribute("tabindex");
-    stage.removeAttribute("aria-label");
-    delete stage.dataset.interactive;
-    delete stage.dataset.motionLive;
-  };
-
-  const turn = () => {
-    if (!interactive) return;
-    scene?.turn();
-  };
-
-  const normalised = (event: PointerEvent) => {
-    const rect = stage.getBoundingClientRect();
-    return [((event.clientX - rect.left) / rect.width) * 2 - 1, ((event.clientY - rect.top) / rect.height) * 2 - 1] as const;
-  };
-
-  stage.addEventListener(
-    "pointerdown",
-    (event) => {
-      if (!interactive || !event.isPrimary || event.button !== 0) return;
-      press = { id: event.pointerId, x: event.clientX, y: event.clientY };
-      dragged = false;
-      // Taken now, not at the threshold: a press can leave the stage within one sample, and
-      // its release has to come back here wherever it lands.
-      stage.setPointerCapture(event.pointerId);
-    },
-    { signal },
-  );
-
-  // Safari scrolls the page under any press dragged past the window's edge, which would carry
-  // the mark away mid-drag. Only cancelling the press stops that, and that also cancels the
-  // focus a press gives, so it is given back here, without the ring a mouse press never shows.
-  stage.addEventListener(
-    "mousedown",
-    (event) => {
-      if (!interactive || event.button !== 0) return;
-      event.preventDefault();
-      stage.focus({ preventScroll: true, focusVisible: false });
-    },
-    { signal },
-  );
-
-  const followPress = (event: PointerEvent, held: Press) => {
-    if (motion.reduced) return; // nothing to drag, so any press stays a click
-    const dx = event.clientX - held.x;
-    const dy = event.clientY - held.y;
-    if (dragging) {
-      scene?.drag(dx, dy);
-    } else if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
-      dragging = true;
-      dragged = true;
-      // Measured from here, so crossing the threshold does not make the mark jump.
-      held.x = event.clientX;
-      held.y = event.clientY;
-      stage.dataset.dragging = "";
-      scene?.dragStart();
+  const loadGl = async () => {
+    const surface = document.createElement("canvas");
+    surface.setAttribute("aria-hidden", "true");
+    // Asked for here rather than in the chunk, so a browser without WebGL downloads nothing.
+    const gl = noGl ? null : surface.getContext("webgl2", CONTEXT);
+    if (!gl) {
+      useFlat();
+      return;
+    }
+    // The glass ring takes the flat ring's place; the flat one stays as invisible layout.
+    flat.setState("gl");
+    try {
+      const { createHeroScene } = await import("./hero-scene");
+      if (signal.aborted) return;
+      field.append(surface);
+      canvas = surface;
+      const built = await createHeroScene({
+        canvas: surface,
+        gl,
+        field,
+        feedback,
+        ring: () => ringBox(layoutRing()),
+        copy: [...hero.querySelectorAll(".hero-title, .hero-form")],
+        cell: Number(lattice?.dataset.cell) || 40,
+        wake: () => schedule(),
+        onLost: dropGl,
+      });
+      if (signal.aborted) {
+        built.destroy();
+        return;
+      }
+      scene = built;
+      // Early enough, the glass takes over the page's honeycomb and runs the wave itself;
+      // late, the page's CSS wave has started, so it finishes and the glass arrives without one.
+      const css = lattice?.getAnimations()[0];
+      const early = !css || Number(css.currentTime ?? 0) < CSS_RIPPLE_DELAY - 100;
+      if (early) css?.pause();
+      scene.reveal(early ? "ripple" : "none", () => {
+        if (lattice && early) lattice.dataset.hidden = "";
+      });
+      schedule();
+    } catch {
+      if (signal.aborted) return;
+      dropGl();
     }
   };
 
-  stage.addEventListener(
-    "pointermove",
-    (event) => {
-      if (!interactive) return;
-      // A release nothing reported, such as one a context menu swallowed: a drag never
-      // outlives the button that started it.
-      if (press?.id === event.pointerId && event.buttons === 0) endPress();
-      if (press?.id === event.pointerId) followPress(event, press);
-      else if (event.pointerType === "mouse" && hoverDevice.matches) scene?.hover(...normalised(event));
-    },
-    { signal },
-  );
+  // ---- frame loop ----
+  let frame = 0;
+  let last = 0;
+  let active = true;
 
-  const released = (event: PointerEvent) => {
-    if (event.pointerId === press?.id) endPress();
+  const draw = (dt: number) => {
+    if (scene) scene.frame(dt);
+    else flat.draw(feedback);
   };
-  window.addEventListener("pointerup", released, { signal });
-  window.addEventListener("pointercancel", released, { signal });
-  stage.addEventListener(
-    "pointerleave",
-    () => {
-      if (interactive) scene?.leave();
-    },
-    { signal },
-  );
+  const needsFrame = () => ctrl.animating || !!scene?.needsFrame;
 
-  // Also how a screen reader's activation arrives, so this is the one path for a press.
-  stage.addEventListener(
-    "click",
-    () => {
-      if (dragged) dragged = false;
-      else turn();
-    },
-    { signal },
-  );
+  const tick = (now: number) => {
+    frame = 0;
+    const dt = Math.min(MAX_DT, Math.max(0, (now - last) / 1000));
+    last = now;
+    ctrl.advance(dt);
+    draw(dt);
+    if (needsFrame()) request();
+  };
 
-  stage.addEventListener(
-    "keydown",
-    (event) => {
-      if (!interactive || (event.key !== "Enter" && event.key !== " ")) return;
-      event.preventDefault();
-      if (!event.repeat) turn();
-    },
-    { signal },
-  );
+  const request = () => {
+    if (!frame && active) frame = requestAnimationFrame(tick);
+  };
 
-  // Only ever observes the forms; nothing here reaches back into them. Tracked per form,
-  // because typing in one can reset it to idle while the other is still waiting on its answer.
+  function schedule() {
+    if (frame || !active) return;
+    if (!motion.ambient && !scene?.needsFrame) {
+      // Nothing may move: every change lands at once, in one draw.
+      ctrl.advance(0);
+      draw(0);
+      return;
+    }
+    last = performance.now();
+    request();
+  }
+
+  const setActive = (value: boolean) => {
+    active = value;
+    if (!active && frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    } else if (active) schedule();
+  };
+
+  // ---- the forms ----
+  // Only ever observes them; nothing here reaches back in. Tracked per form, because typing
+  // in one can reset it to idle while the other is still waiting on its answer.
   const submitting = new Set<string>();
   const emailInputs = [...document.querySelectorAll<HTMLInputElement>('form[data-waitlist] input[type="email"]')];
-  const previousValues = new WeakMap(emailInputs.map(input => [input, input.value] as const));
-  document.addEventListener("beforeinput", event => {
-    if (event.target instanceof HTMLInputElement) previousValues.set(event.target, event.target.value);
-  }, { signal });
-  document.addEventListener("input", (event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || input.type !== "email" || !input.closest("form[data-waitlist]")) return;
-    const deleting = (event instanceof InputEvent && event.inputType.startsWith("delete")) || input.value.length < (previousValues.get(input)?.length ?? 0);
-    scene.turn(deleting ? -1 : 1);
-    stage.dataset.feedbackDirection = deleting ? "backward" : "forward";
-    emailInputs.forEach(field => previousValues.set(field, field.value));
-    if (submitting.size) scene.setWorking(true);
-    stage.dataset.feedback = "typing";
-  }, { signal });
+  const previousValues = new WeakMap(emailInputs.map((input) => [input, input.value] as const));
+  document.addEventListener(
+    "beforeinput",
+    (event) => {
+      if (event.target instanceof HTMLInputElement) previousValues.set(event.target, event.target.value);
+    },
+    { signal },
+  );
+  document.addEventListener(
+    "input",
+    (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== "email" || !input.closest("form[data-waitlist]")) return;
+      const deleting =
+        (event instanceof InputEvent && event.inputType.startsWith("delete")) ||
+        input.value.length < (previousValues.get(input)?.length ?? 0);
+      ctrl.turn(deleting ? -1 : 1);
+      emailInputs.forEach((one) => previousValues.set(one, one.value));
+      if (submitting.size) ctrl.setWorking(true);
+    },
+    { signal },
+  );
   document.addEventListener(
     "waitlist:state",
     (event) => {
@@ -197,29 +204,36 @@ onPage(() => {
       const wasWaiting = submitting.has(source);
       if (state === "submitting") submitting.add(source);
       else submitting.delete(source);
-      scene.setWorking(submitting.size > 0);
-      stage.dataset.feedback = submitting.size ? "working" : feedback.status === "done" ? "done" : "idle";
-      if (wasWaiting && submitting.size === 0 && (state === "accepted" || state === "confirm")) {
-        scene.settle();
-        stage.dataset.feedback = "done";
-      }
+      ctrl.setWorking(submitting.size > 0);
+      if (wasWaiting && submitting.size === 0 && (state === "accepted" || state === "confirm")) ctrl.settle();
     },
     { signal },
   );
 
-  window.addEventListener("scroll", () => scene?.scrolled(), { passive: true, signal });
+  // ---- the cursor ----
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      if (event.pointerType !== "mouse" || !scene) return;
+      scene.hover(event.clientX, event.clientY);
+      schedule();
+    },
+    { passive: true, signal },
+  );
+  document.documentElement.addEventListener("pointerleave", () => scene?.leave(), { signal });
 
-  const syncActive = () => {
-    const visible = onScreen && !document.hidden;
-    scene.setActive(visible);
-  };
+  // ---- visibility and settings ----
+  let onScreen = true;
+  const syncActive = () => setActive(onScreen && !document.hidden);
   const unsubscribe = motion.subscribe(() => {
-    scene.motionChanged();
-    syncActive();
+    ctrl.motionChanged();
+    scene?.motionChanged();
+    schedule();
   });
+  desktop.addEventListener("change", () => schedule(), { signal });
   document.addEventListener("visibilitychange", syncActive, { signal });
-  // A page kept in the back/forward cache must not spin there, and picks up where it left off.
-  window.addEventListener("pagehide", () => { scene.setActive(false); }, { signal });
+  // A page kept in the back/forward cache must not animate there, and picks up where it left off.
+  window.addEventListener("pagehide", () => setActive(false), { signal });
   window.addEventListener(
     "pageshow",
     (event) => {
@@ -227,89 +241,6 @@ onPage(() => {
     },
     { signal },
   );
-
-  const load = async () => {
-    if (signal.aborted) return;
-    // Asked for here rather than by three, so a browser without WebGL downloads nothing.
-    try {
-      const gl = canvas.getContext("webgl2", CONTEXT);
-      if (!gl) { fallback.startAmbient(); return; }
-      const { createHeroScene } = await import("./hero-scene");
-      if (signal.aborted) return;
-      stage.append(canvas);
-      const built = await createHeroScene({
-        stage,
-        canvas,
-        gl,
-        poster,
-        feedback,
-        onLost: () => {
-          gpuScene?.setActive(false);
-          // A lost GPU stays on the lightweight renderer for this visit; no flashing retries.
-          queueMicrotask(() => { gpuScene?.destroy(); gpuScene = undefined; canvas.remove(); });
-          scene = fallback;
-          stage.dataset.renderer = "poster";
-          fallback.startAmbient();
-          fallback.reveal();
-          upgrade();
-          syncActive();
-        },
-        onLive: () => {
-          fallback.setActive(false);
-
-          scene = gpuScene ?? fallback;
-          stage.dataset.renderer = "webgl";
-          upgrade();
-          syncActive();
-        },
-      });
-      if (signal.aborted) {
-        built.destroy();
-        return;
-      }
-      gpuScene = built;
-      const heldTransform = stage.style.transform;
-      fallback.setActive(false);
-      stage.style.transform = "";
-      if (heldTransform && motion.ambient) stage.animate([{ transform: heldTransform }, { transform: "none" }], { duration: 500, easing: "cubic-bezier(.22,1,.36,1)" });
-      scene = built;
-      // A form can already be waiting, and its event went by before there was a scene to hear it.
-      scene.setWorking(submitting.size > 0);
-      if (import.meta.env.DEV) {
-        const dev = window as unknown as Record<string, unknown>;
-        dev.__hero = scene;
-        if (new URLSearchParams(location.search).has("mark-poster")) {
-          dev.__markPoster = (size: number) => built.capture?.(size);
-          return;
-        }
-      }
-      scene.reveal();
-      syncActive();
-    } catch {
-      if (signal.aborted) return;
-      canvas.remove();
-      scene = fallback;
-      stage.dataset.renderer = "poster";
-      fallback.startAmbient();
-      fallback.reveal();
-      upgrade();
-      syncActive();
-    }
-  };
-
-  // Waits for the stage to come near the screen, then for a free moment after first paint.
-  const started = new IntersectionObserver(
-    ([entry]) => {
-      if (!entry?.isIntersecting) return;
-      started.disconnect();
-      const run = () => void load();
-      if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 900 });
-      else setTimeout(run, 120);
-    },
-    { rootMargin: "300px" },
-  );
-  started.observe(stage);
-
   const visibility = new IntersectionObserver(
     ([entry]) => {
       onScreen = entry?.isIntersecting ?? false;
@@ -317,22 +248,33 @@ onPage(() => {
     },
     { rootMargin: "48px" },
   );
-  visibility.observe(stage);
-  stage.dataset.renderer = "poster";
-  upgrade();
-  fallback.reveal();
+  visibility.observe(hero);
+
+  // ---- start ----
+  void loadGl();
+
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__hero = {
+      ctrl,
+      scrub: (age: number) => scene?.scrub?.(age),
+      debug: () => ({
+        renderer: scene ? "webgl" : "flat",
+        looping: !!frame,
+        animating: ctrl.animating,
+        rotation: feedback.rotation,
+        done: feedback.done,
+        gl: scene?.debug(),
+      }),
+    };
+  }
 
   return () => {
     stopping.abort();
-    started.disconnect();
     visibility.disconnect();
     unsubscribe();
-    gpuScene?.destroy();
-    fallback.destroy();
-    delete stage.dataset.renderer;
-    canvas.remove();
-    poster.style.visibility = "";
-    poster.style.opacity = "";
-    downgrade();
+    if (frame) cancelAnimationFrame(frame);
+    ctrl.destroy();
+    scene?.destroy();
+    canvas?.remove();
   };
 });

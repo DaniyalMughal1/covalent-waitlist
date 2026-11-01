@@ -1,11 +1,51 @@
 ---
-import { Picture } from "astro:assets";
 import WaitlistForm from "./WaitlistForm.astro";
 import { copy } from "../config/site";
-import markPoster from "../assets/mark-poster.png";
+import { BOND_STROKE, OUTLINE_PATH, OUTLINE_STROKE, VIEWBOX, VIEWBOX_ATTR } from "../lib/mark";
+import { MarkFeedback } from "../lib/mark-feedback";
+
+// The ring at rest, as flat translucent strokes: the first paint, the renderer where WebGL
+// can't run, and the layout the glass ring reads (hero-mark.ts). Bonds come from the same
+// MarkFeedback that animates them, so the two never disagree.
+const rest = new MarkFeedback().points();
+const bonds = [0, 1, 2].map((b) =>
+  rest
+    .slice(b * 60, b * 60 + 60)
+    .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`)
+    .join(""),
+);
+
+// The honeycomb behind it: flat-topped benzene rings sharing every edge. One tile of the
+// pattern is 3a × √3a and puts a ring's centre on the field's origin, the same lattice
+// the WebGL honeycomb draws (hero-scene.ts), so the two line up as one hands to the other.
+const CELL = 40;
+const H = Math.sqrt(3) * CELL;
+const n = (v: number) => +v.toFixed(2);
+const tile =
+  `M0 ${n(H / 2)}H${n(CELL / 2)}L${CELL} 0H${2 * CELL}L${n(2.5 * CELL)} ${n(H / 2)}H${3 * CELL}` +
+  `M${n(CELL / 2)} ${n(H / 2)}L${CELL} ${n(H)}H${2 * CELL}L${n(2.5 * CELL)} ${n(H / 2)}`;
+const ringStyle = `--vw:${VIEWBOX.w};--vh:${VIEWBOX.h};--outline:${OUTLINE_STROKE};--bond:${BOND_STROKE}`;
 ---
 
 <section class="hero" aria-labelledby="hero-title">
+  <div class="hero-field" data-hero-field>
+    <svg class="lattice" data-lattice data-cell={CELL} aria-hidden="true" focusable="false">
+      <defs>
+        <pattern id="hero-lattice" width={3 * CELL} height={n(H)} patternUnits="userSpaceOnUse">
+          <path class="lattice-shade" d={tile} />
+          <path class="lattice-rim" d={tile} />
+          <path class="lattice-body" d={tile} />
+          <path class="lattice-light" d={tile} />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#hero-lattice)" />
+    </svg>
+    <svg class="ring ring--wide" data-ring="wide" viewBox={VIEWBOX_ATTR} style={ringStyle} aria-hidden="true" focusable="false">
+      <path class="ring-outline" d={OUTLINE_PATH} />
+      <g class="ring-bonds">{bonds.map((d) => <path d={d} />)}</g>
+    </svg>
+  </div>
+
   <div class="hero-copy">
     <h1 class="hero-title" id="hero-title">
       <span>{copy.headline[0]}</span>
@@ -15,26 +55,18 @@ import markPoster from "../assets/mark-poster.png";
   </div>
 
   <div class="hero-object">
-    <div class="hero-stage" data-hero-stage data-motion-surface>
-      <Picture
-        class="hero-poster"
-        src={markPoster}
-        alt="The Covalent mark in polished silver: a flat-topped hexagon holding three short bonds."
-        formats={["avif", "webp"]}
-        fallbackFormat="webp"
-        widths={[340, 460, 640, 920, 1280]}
-        sizes="(max-width: 560px) min(100vw - 40px, 340px), (max-width: 999px) min(100vw - 40px, 460px), min(50vw, 640px, 68svh)"
-        loading="eager"
-        decoding="sync"
-        fetchpriority="high"
-      />
+    <div class="hero-stage" data-hero-stage>
+      <svg class="ring ring--compact" data-ring="compact" viewBox={VIEWBOX_ATTR} style={ringStyle} aria-hidden="true" focusable="false">
+        <path class="ring-outline" d={OUTLINE_PATH} />
+        <g class="ring-bonds">{bonds.map((d) => <path d={d} />)}</g>
+      </svg>
     </div>
   </div>
-
 </section>
 
 <style>
   .hero {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 47fr) minmax(0, 53fr);
     grid-template-rows: minmax(0, 1fr);
@@ -51,6 +83,8 @@ import markPoster from "../assets/mark-poster.png";
   }
 
   .hero-copy {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -99,6 +133,167 @@ import markPoster from "../assets/mark-poster.png";
     }
   }
 
+  /* The field behind the hero, edge to edge across the window: the honeycomb, the desktop
+     ring and, once it loads, the WebGL canvas that draws both in glass and relief. */
+  .hero-field {
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    overflow: clip;
+    pointer-events: none;
+    container-type: size;
+  }
+
+  /* As the page arrives, two waves run out from the ring: the first raises the honeycomb,
+     the second lays it flat again. The WebGL canvas usually takes this over (hero.ts); this
+     is the same pair of waves in CSS, for when it can't. --cx/--cy are the ring's centre,
+     set by hero.ts. */
+  @property --wave-in {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: -300px;
+  }
+  @property --wave-out {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: -300px;
+  }
+  .lattice {
+    --cx: 96%;
+    --cy: 50%;
+    --mask: radial-gradient(
+      circle at var(--cx) var(--cy),
+      transparent calc(var(--wave-out) - 140px),
+      #000 calc(var(--wave-out) + 140px),
+      #000 calc(var(--wave-in) - 140px),
+      transparent calc(var(--wave-in) + 140px)
+    );
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ink);
+    -webkit-mask-image: var(--mask);
+    mask-image: var(--mask);
+    animation: lattice-waves 4.3s linear 0.9s both;
+  }
+  /* Glass rods on the paper, lit from the upper left as the WebGL honeycomb is, and as
+     faint: a pale shadow, a thin rim, a clear body and a highlight along the top. */
+  .lattice path {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .lattice-shade {
+    stroke: currentColor;
+    stroke-opacity: 0.025;
+    stroke-width: 9;
+    transform: translate(2px, 2.6px);
+  }
+  .lattice-rim {
+    stroke: #8e9bab;
+    stroke-opacity: 0.2;
+    stroke-width: 9.6;
+  }
+  .lattice-body {
+    stroke: #f7f8fa;
+    stroke-width: 7.6;
+  }
+  .lattice-light {
+    stroke: #fff;
+    stroke-width: 1.6;
+    transform: translate(-0.8px, -1px);
+  }
+  .lattice[data-hidden] {
+    visibility: hidden;
+  }
+  @keyframes lattice-waves {
+    0% {
+      --wave-in: -300px;
+      --wave-out: -300px;
+      animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    }
+    40% {
+      --wave-in: calc(100vmax + 300px);
+      --wave-out: -300px;
+      animation-timing-function: linear;
+    }
+    48% {
+      --wave-in: calc(100vmax + 300px);
+      --wave-out: -300px;
+      animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    }
+    100% {
+      --wave-in: calc(100vmax + 300px);
+      --wave-out: calc(100vmax + 300px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lattice {
+      -webkit-mask-image: none;
+      mask-image: none;
+      animation: lattice-blink 1.6s ease 0.9s both;
+    }
+  }
+  @keyframes lattice-blink {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    35%,
+    60% {
+      opacity: 1;
+    }
+  }
+
+  /* The flat ring, for where the metal one can't render: translucent ink strokes. Its
+     bonds turn cobalt as the check forms (--done, set by hero-flat-ring.ts). */
+  .ring {
+    display: block;
+    overflow: visible;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ring-outline {
+    stroke: var(--ink);
+    stroke-opacity: 0.18;
+    stroke-width: var(--outline);
+  }
+  .ring-bonds path {
+    stroke: color-mix(in oklab, var(--cobalt) calc(var(--done, 0) * 100%), var(--ink));
+    stroke-opacity: 0.22;
+    stroke-width: var(--bond);
+  }
+  /* Under the glass ring it is layout only. With script it waits to learn which it is,
+     and a late or failed script shows it anyway after a moment. */
+  .ring[data-state="gl"] {
+    visibility: hidden;
+  }
+  :global(html.js) .ring:not([data-state]) {
+    opacity: 0;
+    animation: ring-failsafe 0s linear 3s forwards;
+  }
+  @keyframes ring-failsafe {
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Desktop: the ring is cropped by the right edge of the window, its left vertex a little
+     past the middle and its height nearly the hero's. --k is CSS px per mark unit (R = 100). */
+  .ring--wide {
+    --k: calc(min(42cqw, 49cqh) / 100);
+    display: none;
+    position: absolute;
+    width: calc(var(--vw) * var(--k));
+    height: calc(var(--vh) * var(--k));
+    left: calc(54cqw - (var(--vw) / 2 - 100) * var(--k));
+    top: calc(50cqh - var(--vh) / 2 * var(--k));
+  }
+
   .hero-object {
     position: relative;
     display: flex;
@@ -107,43 +302,37 @@ import markPoster from "../assets/mark-poster.png";
     justify-content: center;
     min-width: 0;
   }
-
-  /* Stable square: the poster and the canvas share it, so neither can shift the layout. */
   .hero-stage {
     position: relative;
-    width: min(100%, 640px, 68svh);
-    aspect-ratio: 1;
+    width: min(100%, 460px);
+    padding-block: 24px;
   }
-  .hero-stage :global(.hero-poster),
-  .hero-stage :global(canvas) {
+  /* Room below for the WebGL ring's grounding shadow, which sits under the ring and reaches
+     about 15% of the ring's width past the bottom of this box (hero-scene.ts, SHADOW). */
+  .ring--compact {
+    width: 100%;
+    height: auto;
+    margin-bottom: 16%;
+  }
+
+  /* The WebGL canvas fades in over the page's honeycomb and flat ring (hero-scene.ts). */
+  .hero-field :global(canvas) {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 420ms linear;
   }
-  .hero-stage[data-interactive] {
-    cursor: grab;
-    touch-action: pan-y pinch-zoom;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .hero-stage[data-dragging] {
-    cursor: grabbing;
-  }
-  /* Nothing to drag here: a press only ever turns the bonds. */
-  @media (prefers-reduced-motion: reduce) {
-    .hero-stage[data-interactive] {
-      cursor: pointer;
+
+  @media (min-width: 1000px) {
+    .ring--wide {
+      display: block;
     }
-  }
-  /* Drawn inside the stage: the caption is pulled up into its bottom edge, and the mark's
-     margin leaves room here at every size. */
-  .hero-stage:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: -12px;
-    border-radius: 16px;
+    .hero-object {
+      display: none;
+    }
   }
 
   .object-caption {
@@ -194,9 +383,6 @@ import markPoster from "../assets/mark-poster.png";
     /* Set lines are a nicety here: under enlarged text spacing they have to be able to wrap. */
     .hero-title > * {
       white-space: normal;
-    }
-    .hero-stage {
-      width: min(100%, 460px);
     }
     .object-caption {
       width: min(100%, 460px);

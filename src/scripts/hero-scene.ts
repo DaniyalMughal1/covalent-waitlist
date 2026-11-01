@@ -1,10 +1,12 @@
-// The hero's 3D mark: the renderer, the studio it is lit by, and one frame loop that owns
-// every moving property. This is the only module that imports three, and hero.ts loads it
-// with a dynamic import, so it is a separate chunk that can never hold up the page.
+// The hero in WebGL: the Covalent ring in polished metal (the studio and material from
+// main), over a faint honeycomb of benzene rings in clear glass. The honeycomb stands on the paper as the page
+// arrives and the wave from the ring lays it flat; after that the cursor stirs a small
+// fluid (src/lib/fluid.ts) and the honeycomb rises wherever it flows, then settles back.
 //
-// The loop stops when nothing can change. Time comes from the scene's own clock, which
-// only advances while ambient motion is allowed, so a pause holds the mark where it is
-// and a return from a hidden tab carries on with no replay and no jump.
+// One three.js scene. hero.ts loads this with a dynamic import, a separate chunk that can
+// never hold up the page. The
+// page's flat SVG ring is the layout: each frame reads its box, and a lens shift puts the
+// 3D ring exactly there, cropped by the window on desktop, glide included.
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
@@ -24,99 +26,105 @@ import {
   PMREMGenerator,
   RGBAFormat,
   Scene,
+  ShaderMaterial,
+  UnsignedByteType,
+  Vector2,
+  Vector3,
+  Vector4,
   WebGLRenderer,
   type WebGLRenderTarget,
 } from "three";
 import { buildRing, type Solid } from "../lib/mark-solid";
+import { MarkRibbon } from "../lib/mark-ribbon";
+import { Fluid } from "../lib/fluid";
 import { atRest, damp, stepSpring, type Spring } from "../lib/spring";
 import { onDensityChange } from "./density";
 import { motion } from "./motion";
 import type { MarkFeedback } from "../lib/mark-feedback";
-import { MarkRibbon } from "../lib/mark-ribbon";
+import type { RingBox } from "./hero-mark";
 
 const DEG = Math.PI / 180;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const smooth = (t: number) => t * t * (3 - 2 * t);
+const inOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
 
 // Long lens, so the tilt reads as a photographed object rather than a wide-angle render.
 const FOV = 22;
-const CAMERA_DISTANCE = 652;
 
 // YXZ order: yaw last, so the top edge stays level in the frame however far it pitches.
 const REST = { yaw: -18 * DEG, pitch: -9 * DEG };
-
-const AMBIENT = { lift: 6, yaw: 4 * DEG, pitch: 2.5 * DEG };
-const HOVER_TILT = 8 * DEG;
-const DRAG_TILT = { yaw: 19 * DEG, pitch: 15 * DEG };
-const DRAG_RANGE = 240; // px of travel that uses up most of the bounded tilt
-const SCROLL_TIP = 17 * DEG;
-
-// Highlights travel faster than the object: the room turns a little against the tilt, which
-// adds to the 2x a mirror already gives. It saturates past the hover range, because at a
-// full drag the mirror alone travels far enough, and more swings the face into the dark.
-const ENV_FOLLOW = { yaw: -0.9, pitch: -0.6, limit: 10 * DEG };
-
-const SHADOW = { x: 250, y: 31, alpha: 0.17 };
-
-const FADE = 0.5; // canvas in over the opaque poster
-const REVEAL = 0.28; // poster out under the opaque canvas, shadow in
-const SWEEP = 1.4;
-const ENV_ARRIVAL = -0.62; // radians the light starts away from rest
-const MAX_DT = 1 / 20; // a stall or a return from elsewhere never becomes a jump
-
-// Resolution follows what a frame costs. All seconds, measured from the start of the frame's
-// JavaScript to the end of its GPU work, one frame in `every`, a decision per `window` samples.
-const COST = { every: 10, window: 9, slow: 0.022, calm: 0.009, giveUp: 0.5, calmWindows: 4 };
-
-const RELEASE_SPEED = 70 * DEG; // per second: a hard flick still only overshoots a little
-
-// Spring settings, as [angular frequency, damping ratio].
-const TILT = {
-  drag: [24, 1],
-  release: [9.5, 0.56],
-  hover: [7, 1],
-  leave: [3.4, 1],
-} as const;
-const TILT_RELEASE_QUIET = [18, 1] as const; // paused: home directly, with no overshoot
+const AMBIENT = { lift: 4, yaw: 3 * DEG, pitch: 2 * DEG };
+const HOVER_TILT = 7 * DEG;
+const SCROLL_TIP = 14 * DEG;
+const TILT = { hover: [6, 1], leave: [3.4, 1] } as const;
 const SCROLL_FOLLOW = [13, 1] as const;
+// Highlights travel faster than the object: the room turns a little against the tilt.
+const ENV_FOLLOW = { yaw: -0.9, pitch: -0.6, limit: 10 * DEG };
+// The grounding shadow: a soft card this far below the ring's centre, in mark units, and
+// this wide and tall.
+const SHADOW = { x: 250, y: 31, alpha: 0.17, drop: 111 };
+const SWEEP = 1.4; // the studio light crossing the metal on arrival
+const ENV_ARRIVAL = -0.62; // radians the light starts away from rest
 
-type TiltMode = "hover" | "leave" | "drag" | "release";
-type Phase = "hold" | "fade" | "reveal" | "live";
+// The canvas fades in over the page's flat lattice, holds, then the honeycomb ripples away.
+const FADE_MS = 420;
+// Two waves out from the ring: the first raises the honeycomb, the second lays it flat.
+const WAVE_HOLD = 0.25;
+const WAVE_IN = 1.7;
+const WAVE_GAP = 0.35;
+const WAVE_OUT = 1.9;
+const RIPPLE_BAND = 150; // CSS px either side of a wavefront
+const QUIET = { rise: 0.5, hold: 0.4, fall: 0.6 }; // reduced motion: a fade in and out instead
+
+// The cursor's brush, in CSS px, and how much of its speed reaches the fluid.
+const FLUID_COLS = 96;
+const BRUSH = 46;
+const FORCE = 0.4;
+const MAX_POINTER_SPEED = 3200;
+const FLOW_SCALE = 90; // cells per second that fill the encoded velocity range
+// The raised trail lingers a little before it sinks back, so the relief can be read.
+const TRAIL = { velocityHalfLife: 0.3, dyeHalfLife: 0.9 };
+
+// Resolution follows what a frame costs (see weighCost). The full-bleed canvas starts a
+// little under the device ratio and climbs once frames prove cheap.
+const COST = { every: 10, window: 9, slow: 0.022, calm: 0.009, giveUp: 0.5, calmWindows: 4 };
+const START_RATIO = 1.5;
 
 export interface HeroSceneOptions {
-  stage: HTMLElement;
   canvas: HTMLCanvasElement;
   gl: WebGL2RenderingContext;
-  poster: HTMLElement;
+  field: HTMLElement;
   feedback: MarkFeedback;
+  /** Where the page's layout ring is right now, in client px. */
+  ring(): RingBox | undefined;
+  /** The headline and the form, which the honeycomb stays faint behind. */
+  copy: Element[];
+  /** The honeycomb's circumradius, CSS px: the same lattice as the page's SVG. */
+  cell: number;
+  wake(): void;
   onLost(): void;
-  /** The canvas has fully replaced the poster, on arrival or after a lost context. */
-  onLive(): void;
 }
 
 export interface HeroScene {
-  /** Fades the rendered first frame in over the poster. */
-  reveal(): void;
-  setActive(active: boolean): void;
-  hover(x: number, y: number): void;
+  /** Advances by dt seconds and draws. dt = 0 only redraws. */
+  frame(dt: number): void;
+  readonly needsFrame: boolean;
+  /**
+   * Fades the canvas in over the page. "ripple" sends two waves out from the ring, the
+   * first raising the honeycomb and the second laying it flat; "none" arrives without them.
+   */
+  reveal(lattice: "ripple" | "none", shown: () => void): void;
+  hover(clientX: number, clientY: number): void;
   leave(): void;
-  dragStart(): void;
-  drag(dx: number, dy: number): void;
-  dragEnd(): void;
-  turn(direction?: number): void;
-  setWorking(working: boolean): void;
-  settle(): void;
-  scrolled(): void;
   motionChanged(): void;
   destroy(): void;
-  debug?(): Record<string, unknown>;
-  capture?(size: number): string;
-  hold?(): void;
-  place?(pose: { yaw?: number; pitch?: number; tipped?: number; sweep?: number }): void;
+  debug(): Record<string, unknown>;
+  /** Dev only: holds the arrival wave at `age` seconds (a negative age lets it go). */
+  scrub?(age: number): void;
 }
 
-// A soft-edged card for the studio and the shadow. Values above 1 are fine: PMREM renders
-// to half float, so a panel's colour is its real brightness.
+// ---------- the studio the metal reflects (from main) ----------
+// A soft-edged card for the studio and the shadow.
 function softTexture(mask: (u: number, v: number) => number, size = 64) {
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
@@ -238,8 +246,6 @@ function buildEnvironment(renderer: WebGLRenderer) {
   return target;
 }
 
-// Hands the main thread back between the heavy steps of the build, so it is a few short
-// tasks and never one long one.
 const breathe = () => new Promise<void>((resolve) => setTimeout(resolve));
 
 function toGeometry(solid: Solid) {
@@ -250,35 +256,227 @@ function toGeometry(solid: Solid) {
   return geometry;
 }
 
+/** A CSS colour token as 0..1 sRGB. */
+function token(name: string, fallback: string): [number, number, number] {
+  const value = (name && getComputedStyle(document.documentElement).getPropertyValue(name).trim()) || fallback;
+  const hex = /^#([0-9a-f]{6})$/i.exec(value)?.[1] ?? fallback.slice(1);
+  return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+}
+
+// ---------- the honeycomb ----------
+// A full-screen pass in the scene itself, drawn first and outside the camera. Positions
+// are CSS px in the field, y down, from the vertex varying.
+const LATTICE_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`;
+
+const LATTICE_FRAGMENT = /* glsl */ `
+varying vec2 vUv;
+uniform vec2 uSize;
+uniform float uCell;
+uniform vec3 uPaper;
+uniform sampler2D uFluid;
+uniform float uFlowScale;
+uniform float uTime;
+uniform vec2 uRippleCentre;
+uniform float uRipple;
+uniform float uRipple2;
+uniform float uRippleBand;
+uniform float uLoad;
+uniform vec4 uCopy;
+
+const float PI = 3.14159265;
+const float SQ3 = 1.7320508;
+// How much of the glass reaches the page: a faint presence, never a pattern to read.
+const float INTENSITY = 0.25;
+// Glass rods along every bond and a bead at every carbon, at full rise, in CSS px.
+const float HEIGHT = 6.0;
+const float BOND = 0.12; // rod half-width, as a share of the ring's radius
+const float ATOM = 0.2; // bead radius, the same way
+// How far the glass bends what is under it: px of shift per px of height and slope.
+const float BEND = 1.6;
+// Thick glass darkens a touch, evenly: clear glass with no colour of its own.
+const float THICK_SHADE = 0.95;
+
+// Offset from the nearest centre of a flat-topped honeycomb (circumradius a) whose centres
+// sit at (1.5a i, sqrt3 a (j + i/2)): two rectangular grids, take the nearer centre.
+vec2 hexLocal(vec2 p, float a) {
+  vec2 sp = vec2(3.0 * a, SQ3 * a);
+  vec2 o = vec2(1.5 * a, 0.5 * SQ3 * a);
+  vec2 l1 = p - sp * floor(p / sp + 0.5);
+  vec2 l2 = p - o - sp * floor((p - o) / sp + 0.5);
+  return dot(l1, l1) < dot(l2, l2) ? l1 : l2;
+}
+
+// A glass rod's round cross-section: nearly flat across the top, steep only at its edge.
+float profile(float t) {
+  float c = clamp(t, 0.0, 1.0);
+  // The last tenth eases down to the paper, so the edge stays clean at any pixel density.
+  return sqrt(max(1.0 - c * c, 0.0)) * (1.0 - smoothstep(0.88, 1.0, c) * 0.6);
+}
+
+float relief(vec2 p) {
+  vec2 q = abs(hexLocal(p, uCell));
+  float apothem = 0.8660254 * uCell;
+  float edge = apothem - max(q.y, q.x * 0.8660254 + q.y * 0.5);
+  float bond = profile(edge / (BOND * uCell));
+  float atom = min(length(q - vec2(uCell, 0.0)), length(q - vec2(0.5 * uCell, apothem)));
+  return HEIGHT * max(bond, 1.15 * profile(atom / (ATOM * uCell)));
+}
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), f.x), f.y);
+}
+// The paper's own faint tooth, which the glass magnifies and bends.
+float grain(vec2 p) {
+  return 0.55 * noise(p * 0.05) + 0.45 * noise(p * 0.23);
+}
+
+// One key light from the upper left.
+const vec3 LIGHT = vec3(-0.4725, -0.6014, 0.6443);
+
+// The paper at q, as light reaches it through the glass: a pale shadow behind each rod,
+// with a bright caustic line inside it where the rod focuses the light.
+float paper(vec2 q, float rise) {
+  vec2 toward = normalize(LIGHT.xy);
+  float climb = LIGHT.z / length(LIGHT.xy);
+  float shade = 1.0;
+  float caustic = 0.0;
+  for (int i = 1; i <= 7; i++) {
+    float s = float(i) * 1.8;
+    float h = relief(q + toward * s) * rise;
+    float through = h - s * climb; // glass the light passes through on its way here
+    if (through > 0.0) {
+      float k = through / (HEIGHT * rise + 1e-3);
+      shade = min(shade, 1.0 - 0.14 * smoothstep(0.0, 0.35, k));
+      caustic = max(caustic, exp(-pow((k - 0.6) / 0.16, 2.0)));
+    }
+  }
+  return (shade + caustic * 0.12 * rise) * (1.0 + (grain(q) - 0.5) * 0.025 * rise);
+}
+
+void main() {
+  vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+  vec2 p = uv * uSize;
+
+  vec4 fluid = texture2D(uFluid, uv);
+
+  // How far the glass honeycomb stands off the paper here: where the cursor's trail is, and
+  // on arrival between two waves from the ring, the first raising it, the second laying it
+  // flat again.
+  vec2 fromRing = p - uRippleCentre;
+  float d = length(fromRing);
+  float first = (d - uRipple) / uRippleBand;
+  float second = (d - uRipple2) / uRippleBand;
+  float crest = uLoad * (exp(-first * first * 2.5) + exp(-second * second * 2.5));
+  float arriving = uLoad * (1.0 - smoothstep(-1.0, 1.0, first)) * smoothstep(-1.0, 1.0, second);
+  // Low behind the headline and the form, so they always read first.
+  vec2 outside = max(max(uCopy.xy - p, p - uCopy.zw), 0.0);
+  float clear = mix(0.4, 1.0, smoothstep(0.0, 260.0, length(outside)));
+  float rise = clamp(max(smoothstep(0.04, 0.6, fluid.r) * 0.8, arriving) + crest * 0.3, 0.0, 1.0) * clear;
+  if (rise < 0.003) {
+    gl_FragColor = vec4(uPaper, 1.0);
+    return;
+  }
+
+  float h0 = relief(p) * rise;
+  float e = 0.5;
+  vec3 n = normalize(vec3(-(relief(p + vec2(e, 0.0)) * rise - h0) / e, -(relief(p + vec2(0.0, e)) * rise - h0) / e, 1.0));
+  float glass = smoothstep(0.0, 0.35, h0);
+
+  // What shows through: the paper under the glass, bent by its slope. Every colour bends
+  // alike, so the edges stay clean, with no fringes.
+  vec3 color = uPaper * paper(p - n.xy * h0 * BEND * glass, rise);
+  float steep = 1.0 - n.z;
+  // Thick glass darkens a touch; only its very edge, turned to the darker room, rims dark.
+  color *= mix(1.0, THICK_SHADE, glass * clamp(h0 / HEIGHT, 0.0, 1.0));
+  color *= 1.0 - 0.42 * glass * smoothstep(0.55, 0.97, steep);
+
+  // The room reflected at grazing angles: mostly bright, a softbox up and to the left, and
+  // darker only where a face turns to the floor.
+  vec3 r = reflect(vec3(0.0, 0.0, -1.0), n);
+  float room = mix(0.9, 1.2, smoothstep(0.2, 0.8, dot(normalize(r), LIGHT)));
+  room *= mix(0.72, 1.0, smoothstep(0.5, -0.1, r.y));
+  float fresnel = 0.04 + 0.96 * pow(steep, 5.0);
+  color = mix(color, uPaper * room, fresnel * glass);
+  // A crisp highlight along each rod, a softer sheen around it, and the glow glass carries
+  // to its far edge, away from the light.
+  float facing = max(dot(n, normalize(LIGHT + vec3(0.0, 0.0, 1.0))), 0.0);
+  color += glass * (pow(facing, 160.0) * 0.9 + pow(facing, 22.0) * 0.07);
+  color += glass * 0.1 * smoothstep(0.6, 0.95, steep) * max(dot(normalize(n.xy + 1e-5), -normalize(LIGHT.xy)), 0.0);
+
+  gl_FragColor = vec4(mix(uPaper, min(color, vec3(1.0)), INTENSITY), 1.0);
+}`;
+
 export async function createHeroScene(options: HeroSceneOptions): Promise<HeroScene> {
-  const { stage, canvas, gl, poster, feedback, onLost, onLive } = options;
+  const { canvas, gl, field, feedback, ring, copy, cell, wake, onLost } = options;
 
   const renderer = new WebGLRenderer({ canvas, context: gl, antialias: true, alpha: true, stencil: false });
-  renderer.setClearColor(0x000000, 0);
+  const paper = token("--paper", "#faf9f6");
+  renderer.setClearColor(new Color().setRGB(...paper), 1);
+  // For the metal; the honeycomb pass writes its page colours directly and is not tone mapped.
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
-
   let shaderFailed = false;
   renderer.debug.onShaderError = () => {
     shaderFailed = true;
   };
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(FOV, 1, 100, 1000);
-  camera.position.z = CAMERA_DISTANCE;
+  const camera = new PerspectiveCamera(FOV, 1, 1, 2000);
 
   await breathe();
   let environment: WebGLRenderTarget = buildEnvironment(renderer);
   scene.environment = environment.texture;
   await breathe();
 
+  // ---- the honeycomb ----
+  let fluid = new Fluid(FLUID_COLS, 60, TRAIL);
+  let fluidData = new Uint8Array(FLUID_COLS * 60 * 4);
+  let fluidTexture = new DataTexture(fluidData, FLUID_COLS, 60, RGBAFormat, UnsignedByteType);
+  const lattice = new ShaderMaterial({
+    vertexShader: LATTICE_VERTEX,
+    fragmentShader: LATTICE_FRAGMENT,
+    uniforms: {
+      uSize: { value: new Vector2(1, 1) },
+      uCell: { value: cell },
+      uPaper: { value: new Vector3(...paper) },
+      uFluid: { value: fluidTexture },
+      uFlowScale: { value: 1 },
+      uTime: { value: 0 },
+      uRippleCentre: { value: new Vector2() },
+      uRipple: { value: -RIPPLE_BAND * 2 },
+      uRipple2: { value: -RIPPLE_BAND * 2 },
+      uRippleBand: { value: RIPPLE_BAND },
+      uLoad: { value: 0 },
+      uCopy: { value: new Vector4(-1e4, -1e4, -1e4, -1e4) },
+    },
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const backdropGeometry = new PlaneGeometry(2, 2);
+  const backdrop = new Mesh(backdropGeometry, lattice);
+  backdrop.frustumCulled = false;
+  backdrop.renderOrder = -10;
+  scene.add(backdrop);
+
+  // ---- the ring: main's polished metal ----
   const metal = new MeshStandardMaterial({
     color: 0xeef0f3,
     metalness: 1,
     roughness: 0.15,
     dithering: true,
   });
-
   const ringGeometry = toGeometry(buildRing());
   const object = new Group();
   object.rotation.order = "YXZ";
@@ -286,15 +484,12 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
   const bondMaterial = metal.clone();
   bondMaterial.vertexColors = true;
   const bondGeometry = [new MarkRibbon(60), new MarkRibbon(60), new MarkRibbon(60)];
-  object.add(...bondGeometry.map(geometry => new Mesh(geometry, bondMaterial)));
+  object.add(...bondGeometry.map((geometry) => new Mesh(geometry, bondMaterial)));
   let lastShape = "";
   scene.add(object);
 
-  // The grounding shadow is a soft card in the scene, not a filter on the page.
-  const shadowTexture = softTexture((u, v) => {
-    const d = Math.hypot(u - 0.5, v - 0.5) * 2;
-    return smooth(clamp01(1 - d)) ** 1.5;
-  }, 128);
+  // A soft grounding shadow on the paper.
+  const shadowTexture = softTexture((u, v) => smooth(clamp01(1 - Math.hypot(u - 0.5, v - 0.5) * 2)) ** 1.5, 128);
   const shadowPlane = new PlaneGeometry(1, 1);
   const shadowMaterial = new MeshBasicMaterial({
     map: shadowTexture,
@@ -304,223 +499,284 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     toneMapped: false,
   });
   const shadow = new Mesh(shadowPlane, shadowMaterial);
-  shadow.position.set(0, -111, -24);
+  shadow.position.set(0, -SHADOW.drop, -24);
   scene.add(shadow);
 
-  // Read once per change and never per frame. In Chromium, reading a media query's
-  // `matches` from a frame callback consumes the pending change, so polling here would
-  // stop the change event reaching this and every other subscriber.
+  // Read once per change, never per frame (polling `matches` in a frame swallows changes).
   let ambient = motion.ambient;
-  let reduced = motion.reduced;
 
-  // State. Each spring has one owner; nothing else writes to it.
+  // ---- state ----
   const tiltYaw: Spring = { x: 0, v: 0 };
   const tiltPitch: Spring = { x: 0, v: 0 };
   const tip: Spring = { x: 0, v: 0 };
   let target = { yaw: 0, pitch: 0 };
-  let dragBase = { yaw: 0, pitch: 0 };
-  let tiltMode: TiltMode = "leave";
-  let releaseAge = 0;
+  let tiltMode: "hover" | "leave" = "leave";
   let tipTarget = 0;
-  let scrollDirty = true;
-  let compact = window.innerWidth < 1000;
-
-  let phase: Phase = "hold";
-  let phaseAge = 0;
-  let clock = 0; // seconds of ambient life; stops while paused, hidden or reduced
-  let rate = ambient ? 1 : 0; // eases the clock, so a pause settles instead of freezing
-  let ambientGain = 1; // falls to 0 at once under reduced motion, recovers calmly after
+  let clock = 0;
+  let rate = ambient ? 1 : 0;
   let sweepAge = SWEEP;
-
-  let frame = 0;
-  let lastTime = 0;
-  let dirty = true;
-  let active = false;
+  let width = 0; // CSS px
+  let height = 0;
+  let resizePending = true;
+  let ringCentre = { x: 0, y: 0 };
+  let ringRadius = 0;
+  // How much of the shadow the canvas can show: a shadow that would run off the bottom of
+  // the hero fades out instead of being cut straight across.
+  let shadowFit = 1;
   let lost = false;
   let destroyed = false;
 
-  // Adaptive resolution: down when frames cost too much, back up once they cost little.
-  let ratioCeiling = 2;
+  // Arrival: "fading" until the canvas covers the page, then the honeycomb's exit.
+  let latticeMode: "ripple" | "quiet" | "none" = "none";
+  let loadAge = 0;
+  let loadDone = true;
+  let loadHeld = false; // dev only: the scrub hook holds the wave still
+  let fadeTimer = 0;
+  let farthest = 1;
+
+  // Pointer and fluid.
+  let pointer: { x: number; y: number; t: number } | undefined;
+  let last: { x: number; y: number; t: number } | undefined;
+  let pointerMoved = false;
+  let fluidDirty = false;
+
+  // Adaptive resolution.
+  let ratioCeiling = START_RATIO;
+  let deviceCap = 2;
   let framesSinceTimed = 0;
   let timing = false;
   const costs: number[] = [];
   let lastCost = 0;
   let calmWindows = 0;
   let calmNeeded = COST.calmWindows;
-  let climbed = false; // a fall straight after a climb means the cap is out of reach for now
-  let heldRatio = false; // dev only: lets a test pin the resolution
+  let climbed = false;
 
-  // Spreads and lightens a touch as the mark lifts, and thins as it leans.
-  const drawShadow = (strength: number) => {
-    const lift = object.position.y / (compact ? 8 : AMBIENT.lift); // -1..1 through the drift
-    const leaning = Math.abs(tiltYaw.x) + Math.abs(tiltPitch.x) + Math.abs(tip.x);
-    shadow.position.x = tiltYaw.x * 62 + object.position.x;
-    shadow.scale.set(
-      SHADOW.x * (1 + 0.04 * lift) * (1 - 0.1 * Math.min(1, Math.abs(tiltYaw.x) / DRAG_TILT.yaw)),
-      SHADOW.y * (1 + 0.06 * lift + 0.5 * Math.sin(Math.abs(tip.x))),
-      1,
-    );
-    shadowMaterial.opacity = strength * SHADOW.alpha * (1 - 0.08 * lift - 0.35 * Math.min(1, leaning));
+  const sizeBuffer = () => {
+    if (!width || !height) return;
+    deviceCap = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setDrawingBufferSize(width, height, Math.min(deviceCap, ratioCeiling));
+  };
+
+  const resize = () => {
+    resizePending = false;
+    const w = field.clientWidth;
+    const h = field.clientHeight;
+    const changed = w !== width || h !== height;
+    width = w;
+    height = h;
+    sizeBuffer();
+    if (!changed || !width || !height) return;
+    lattice.uniforms.uSize!.value.set(width, height);
+    // The fluid keeps square cells across the field.
+    const rows = Math.max(16, Math.round((FLUID_COLS * height) / width));
+    fluid = new Fluid(FLUID_COLS, rows, TRAIL);
+    fluidData = new Uint8Array(FLUID_COLS * rows * 4);
+    fluidTexture.dispose();
+    fluidTexture = new DataTexture(fluidData, FLUID_COLS, rows, RGBAFormat, UnsignedByteType);
+    fluidTexture.magFilter = fluidTexture.minFilter = LinearFilter;
+    fillFluid();
+    lattice.uniforms.uFluid!.value = fluidTexture;
+    lattice.uniforms.uFlowScale!.value = (FLOW_SCALE * width) / FLUID_COLS;
+    farthest = Math.hypot(Math.max(ringCentre.x, width - ringCentre.x), Math.max(ringCentre.y, height - ringCentre.y));
+  };
+
+  // Dye in red; velocity in green and blue around a mid grey.
+  const fillFluid = () => {
+    const n = fluid.w * fluid.h;
+    for (let i = 0; i < n; i++) {
+      fluidData[i * 4] = Math.min(255, fluid.dye[i]! * 255);
+      fluidData[i * 4 + 1] = Math.max(0, Math.min(255, 128 + (fluid.u[i]! / FLOW_SCALE) * 255));
+      fluidData[i * 4 + 2] = Math.max(0, Math.min(255, 128 + (fluid.v[i]! / FLOW_SCALE) * 255));
+      fluidData[i * 4 + 3] = 255;
+    }
+    fluidTexture.needsUpdate = true;
+  };
+
+  // Where the layout ring is; the camera is placed so the glass ring lands exactly there.
+  const place = (canvasRect: DOMRect) => {
+    const box = ring();
+    object.visible = shadow.visible = !!box && box.radius > 0;
+    if (!box || !object.visible) return;
+    ringCentre = { x: box.cx - canvasRect.left, y: box.cy - canvasRect.top };
+    ringRadius = box.radius;
+    // One mark unit in CSS px at the ring's depth (the ring is R = 100 units).
+    const pxPerUnit = box.radius / 100;
+    const shadowCentre = ringCentre.y + SHADOW.drop * pxPerUnit;
+    const overflow = shadowCentre + (SHADOW.y / 2) * pxPerUnit - height;
+    // Gone by the time the canvas edge would cut through the shadow's middle.
+    shadowFit = 1 - smooth(clamp01(overflow / ((SHADOW.y / 2) * pxPerUnit)));
+    const distance = height / (2 * Math.tan((FOV * DEG) / 2) * pxPerUnit);
+    camera.aspect = width / height;
+    camera.position.set(0, 0, distance);
+    camera.near = Math.max(1, distance - 420);
+    camera.far = distance + 420;
+    // A lens shift, not a turn: the ring stays square to the lens wherever it sits.
+    camera.setViewOffset(width, height, width / 2 - ringCentre.x, height / 2 - ringCentre.y, width, height);
+    camera.updateProjectionMatrix();
+    // The box around the headline and the form, whatever their layout.
+    if (copy.length) {
+      let left = Infinity;
+      let top = Infinity;
+      let right = -Infinity;
+      let bottom = -Infinity;
+      for (const el of copy) {
+        const r = el.getBoundingClientRect();
+        left = Math.min(left, r.left);
+        top = Math.min(top, r.top);
+        right = Math.max(right, r.right);
+        bottom = Math.max(bottom, r.bottom);
+      }
+      lattice.uniforms.uCopy!.value.set(left - canvasRect.left, top - canvasRect.top, right - canvasRect.left, bottom - canvasRect.top);
+    }
+    // Scrolling the hero away tips the ring back, as the metal one did.
+    tipTarget = ambient ? -SCROLL_TIP * smooth(clamp01(-canvasRect.top / (canvasRect.height * 0.8))) : 0;
+  };
+
+  const stir = (canvasRect: DOMRect) => {
+    if (!pointerMoved) return;
+    pointerMoved = false;
+    if (!pointer) return;
+    const x = pointer.x - canvasRect.left;
+    const y = pointer.y - canvasRect.top;
+    const t = pointer.t;
+    // The ring leans toward the cursor wherever it is over the hero.
+    const inside = x >= 0 && y >= 0 && x <= width && y <= height;
+    if (inside && ambient) {
+      target = {
+        yaw: Math.max(-1, Math.min(1, (x - ringCentre.x) / (width * 0.5))) * HOVER_TILT,
+        pitch: Math.max(-1, Math.min(1, (y - ringCentre.y) / (height * 0.5))) * HOVER_TILT,
+      };
+      tiltMode = "hover";
+    }
+    if (!inside || !ambient) {
+      last = undefined;
+      return;
+    }
+    const cellPx = width / fluid.w;
+    if (last) {
+      const dt = Math.max(1 / 240, (t - last.t) / 1000);
+      let vx = (x - last.x) / dt;
+      let vy = (y - last.y) / dt;
+      const speed = Math.hypot(vx, vy);
+      if (speed > MAX_POINTER_SPEED) {
+        vx *= MAX_POINTER_SPEED / speed;
+        vy *= MAX_POINTER_SPEED / speed;
+      }
+      const dist = Math.hypot(x - last.x, y - last.y);
+      if (dist > 0.5) {
+        // Splats along the path, so a fast stroke leaves a trail, not a row of blobs.
+        const steps = Math.min(10, Math.max(1, Math.ceil(dist / (BRUSH * 0.6))));
+        const dye = Math.min(0.35, 0.08 + speed / 3200) / Math.sqrt(steps);
+        for (let k = 1; k <= steps; k++) {
+          const sx = last.x + ((x - last.x) * k) / steps;
+          const sy = last.y + ((y - last.y) * k) / steps;
+          fluid.splat(sx / cellPx - 0.5, sy / cellPx - 0.5, (vx / cellPx) * FORCE, (vy / cellPx) * FORCE, BRUSH / cellPx / 2, dye);
+        }
+      }
+    }
+    last = { x, y, t };
   };
 
   const pose = () => {
-    const a = Math.sin(Math.min(clock / 1.6, 1) * (Math.PI / 2)) ** 2 * ambientGain; // ambient eases in from nothing
+    const a = Math.sin(Math.min(clock / 1.6, 1) * (Math.PI / 2)) ** 2;
     const t = clock * Math.PI * 2;
-    object.position.x = 1.8 * a * Math.sin(t / 9.7);
-    object.rotation.z = 1.4 * DEG * a * Math.sin(t / 8.1);
-    object.position.y = (compact ? 8 : AMBIENT.lift) * a * Math.sin(t / 6.8);
-    object.rotation.y = REST.yaw + tiltYaw.x + (compact ? 5 * DEG : AMBIENT.yaw) * a * Math.sin(t / 11.3);
-    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + (compact ? 3 * DEG : AMBIENT.pitch) * a * Math.sin(t / 8.3);
+    object.position.x = 1.6 * a * Math.sin(t / 9.7);
+    object.rotation.z = 1.2 * DEG * a * Math.sin(t / 8.1);
+    object.position.y = AMBIENT.lift * a * Math.sin(t / 6.8);
+    object.rotation.y = REST.yaw + tiltYaw.x + AMBIENT.yaw * a * Math.sin(t / 11.3);
+    object.rotation.x = REST.pitch + tiltPitch.x + tip.x + AMBIENT.pitch * a * Math.sin(t / 8.3);
     const shape = `${feedback.rotation}/${feedback.circle}/${feedback.done}/${feedback.comet}`;
     if (shape !== lastShape) {
       lastShape = shape;
       const points = feedback.points();
-      // One depth step apart at this camera's range, so overlapping strokes never flicker.
-      bondGeometry.forEach((geometry, i) => geometry.update(points.slice(i * 60, i * 60 + 60), i * .03));
+      // One depth step apart, so overlapping strokes never flicker.
+      bondGeometry.forEach((geometry, i) => geometry.update(points.slice(i * 60, i * 60 + 60), i * 0.03));
     }
-
+    // The studio turns in on arrival, and a little against any tilt, so highlights travel.
     const sweep = smooth(clamp01(sweepAge / SWEEP));
     const follow = (tilt: number) => ENV_FOLLOW.limit * Math.tanh(tilt / ENV_FOLLOW.limit);
     scene.environmentRotation.y = ENV_ARRIVAL * (1 - sweep) + follow(tiltYaw.x) * ENV_FOLLOW.yaw;
     scene.environmentRotation.x = follow(tiltPitch.x) * ENV_FOLLOW.pitch;
+
+    const lift = object.position.y / AMBIENT.lift;
+    shadow.position.x = tiltYaw.x * 62 + object.position.x;
+    shadow.scale.set(SHADOW.x * (1 + 0.04 * lift), SHADOW.y * (1 + 0.06 * lift + 0.5 * Math.sin(Math.abs(tip.x))), 1);
+    shadowMaterial.opacity = SHADOW.alpha * (1 - 0.08 * lift) * shadowFit;
   };
 
-  const draw = () => {
-    pose();
-    const strength = phase === "live" ? 1 : phase === "reveal" ? smooth(clamp01(phaseAge / REVEAL)) : 0;
-    drawShadow(strength);
-    renderer.render(scene, camera);
-  };
-
-  const stepTilt = (dt: number) => {
-    // Paused, a drag is still direct: it lands on the pointer, with no lag to read as motion.
-    if (tiltMode === "drag" && !ambient) {
-      tiltYaw.x = target.yaw;
-      tiltPitch.x = target.pitch;
-      tiltYaw.v = tiltPitch.v = 0;
+  const stepLattice = (dt: number) => {
+    const u = lattice.uniforms;
+    if (loadDone) {
+      u.uLoad!.value = 0;
       return;
     }
-    const settings = tiltMode === "release" && !ambient ? TILT_RELEASE_QUIET : TILT[tiltMode];
-    stepSpring(tiltYaw, target.yaw, settings[0], settings[1], dt);
-    stepSpring(tiltPitch, target.pitch, settings[0], settings[1], dt);
-  };
-
-  const snapToRest = () => {
-    tiltYaw.x = tiltYaw.v = tiltPitch.x = tiltPitch.v = tip.x = tip.v = 0;
-    target = { yaw: 0, pitch: 0 };
-    tipTarget = 0;
-    tiltMode = "leave";
-    feedback.update(0, false);
-  };
-
-  const readScroll = () => {
-    if (!scrollDirty) return;
-    scrollDirty = false;
-    if (!ambient) {
-      tipTarget = 0;
+    if (!loadHeld) loadAge += dt;
+    if (latticeMode === "quiet") {
+      // No waves: the whole honeycomb fades in, holds, and fades out together.
+      const up = smooth(clamp01((loadAge - WAVE_HOLD) / QUIET.rise));
+      const down = smooth(clamp01((loadAge - WAVE_HOLD - QUIET.rise - QUIET.hold) / QUIET.fall));
+      u.uLoad!.value = up * (1 - down);
+      u.uRipple!.value = 1e6;
+      u.uRipple2!.value = -1e6;
+      if (down >= 1) loadDone = true;
       return;
     }
-    // On phones the mark responds throughout its visible travel, below the form.
-    // Desktop keeps the original tip as the mark passes under the header.
-    const rect = stage.getBoundingClientRect();
-    tipTarget = compact
-      ? 12 * DEG * (0.5 - smooth(clamp01((window.innerHeight - rect.top) / (window.innerHeight + rect.height))))
-      : -SCROLL_TIP * smooth(clamp01((88 - rect.top) / (rect.height * 0.8)));
-  };
-
-  const setPhase = (next: Phase) => {
-    phase = next;
-    phaseAge = 0;
-    if (next === "fade") canvas.style.opacity = "0";
-    if (next === "reveal") canvas.style.opacity = "1";
-    if (next === "live") {
-      canvas.style.opacity = "1";
-      poster.style.visibility = "hidden";
-      poster.style.opacity = "";
-      onLive();
-    }
+    const reach = farthest + RIPPLE_BAND * 4;
+    const raise = inOut(clamp01((loadAge - WAVE_HOLD) / WAVE_IN));
+    const flatten = inOut(clamp01((loadAge - WAVE_HOLD - WAVE_IN - WAVE_GAP) / WAVE_OUT));
+    u.uLoad!.value = 1;
+    u.uRippleCentre!.value.set(ringCentre.x, ringCentre.y);
+    u.uRipple!.value = -RIPPLE_BAND * 2 + raise * reach;
+    u.uRipple2!.value = -RIPPLE_BAND * 2 + flatten * reach;
+    if (flatten >= 1) loadDone = true;
   };
 
   const step = (dt: number) => {
-    phaseAge += dt;
-    if (phase === "fade") {
-      canvas.style.opacity = smooth(clamp01(phaseAge / FADE)).toFixed(3);
-      if (phaseAge >= FADE) setPhase("reveal");
-    } else if (phase === "reveal") {
-      // The canvas is opaque over the metal by now, so only the shadow and the edges change.
-      poster.style.opacity = (1 - smooth(clamp01(phaseAge / REVEAL))).toFixed(3);
-      if (phaseAge >= REVEAL) setPhase("live");
-    }
-
     const wanted = ambient ? 1 : 0;
     rate = damp(rate, wanted, 3.2, dt);
     if (Math.abs(rate - wanted) < 0.004) rate = wanted;
-    // The poster is still on the page until `live`, so until then the canvas has to stay its
-    // exact twin: nothing that moves the form or the light may start any earlier.
-    const live = phase === "live";
-    if (live) {
-      clock += dt * rate;
-      if (sweepAge < SWEEP) sweepAge += dt * rate;
+    clock += dt * rate;
+    if (sweepAge < SWEEP) sweepAge += dt;
+    lattice.uniforms.uTime!.value = clock;
+    stepLattice(dt);
+    if (!fluid.idle) {
+      fluid.step(dt);
+      fluidDirty = true;
     }
-    if (ambientGain < 1 && ambient) ambientGain = Math.min(1, ambientGain + dt / 1.4);
-
-    feedback.update(dt, ambient);
-
-    if (tiltMode === "release") {
-      releaseAge += dt;
-      if (releaseAge > 1.1) tiltMode = target.yaw || target.pitch ? "hover" : "leave";
+    if (fluidDirty) {
+      fillFluid();
+      fluidDirty = !fluid.idle;
     }
-
-    if (live) readScroll();
-    stepTilt(dt);
+    stepSpring(tiltYaw, target.yaw, TILT[tiltMode][0], TILT[tiltMode][1], dt);
+    stepSpring(tiltPitch, target.pitch, TILT[tiltMode][0], TILT[tiltMode][1], dt);
     stepSpring(tip, tipTarget, SCROLL_FOLLOW[0], SCROLL_FOLLOW[1], dt);
   };
 
-  const needsFrame = () => {
-    if (dirty || phase === "fade" || phase === "reveal") return true;
-    if (ambient || rate > 0) return true;
-    return !atRest(tiltYaw, target.yaw) || !atRest(tiltPitch, target.pitch) || (ambient && feedback.animating) || !atRest(tip, tipTarget);
-  };
-
-  const schedule = () => {
-    if (frame || destroyed) return;
-    if (active && !lost && needsFrame()) frame = requestAnimationFrame(tick);
-    else lastTime = 0;
-  };
-
-  const invalidate = () => {
-    dirty = true;
-    schedule();
-  };
-
+  // ---- frame cost ----
   const weighCost = (cost: number) => {
     costs.push(cost);
     if (costs.length < COST.window) return;
     costs.sort((a, b) => a - b);
-    lastCost = costs[COST.window >> 1] ?? 0; // the median, so one long task elsewhere is not a verdict
+    lastCost = costs[COST.window >> 1] ?? 0;
     costs.length = 0;
-    if (import.meta.env.DEV && heldRatio) return;
     const current = Math.min(ratioCeiling, deviceCap);
     if (lastCost > COST.slow && current > 1) {
       ratioCeiling = Math.max(1, current - 0.25);
-      if (climbed) calmNeeded *= 2; // hunting, so it waits longer before it tries again
+      if (climbed) calmNeeded *= 2;
       climbed = false;
       calmWindows = 0;
-      resize();
+      sizeBuffer();
     } else if (lastCost < COST.calm && current < deviceCap && ++calmWindows >= calmNeeded) {
       ratioCeiling = current + 0.25;
       climbed = true;
       calmWindows = 0;
-      resize();
+      sizeBuffer();
     } else if (lastCost >= COST.calm) {
       calmWindows = 0;
     }
   };
 
-  // How often frames arrive says nothing about how hard they were: a 30Hz display or Low Power
-  // Mode delivers a steady 33ms with room to spare, and so does a GPU that is out of time on a
-  // 60Hz one. So this times the work instead. A fence marks the end of the frame's GPU commands,
-  // and it is polled from timers, which never blocks the page the way a readback would.
+  // Times the frame's GPU work with a fence polled from timers, never blocking the page.
   const timeFrame = (started: number) => {
     if (timing || ++framesSinceTimed < COST.every) return;
     const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -540,105 +796,43 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
       }
       gl.deleteSync(fence);
       timing = false;
-      // Background tabs throttle timers, so a reading taken across a hide is not a reading.
-      if (active) weighCost(cost);
+      if (!document.hidden) weighCost(cost);
     };
     setTimeout(poll);
   };
 
-  const tick = (now: number) => {
-    frame = 0;
-    const started = performance.now(); // a stopwatch for this frame's cost, not a timeline
-    const raw = lastTime ? (now - lastTime) / 1000 : 1 / 60;
-    lastTime = now;
-    dirty = false;
-    step(Math.min(raw, MAX_DT));
-    draw();
-    timeFrame(started);
-    schedule();
-  };
-
-  // Square by construction: the stage reserves it before anything loads.
-  let stageSize = stage.clientWidth;
-  let deviceCap = 2; // kept here so the cost check never has to read the window
-  const sizeBuffer = () => {
-    if (!stageSize) return;
-    deviceCap = Math.min(window.devicePixelRatio || 1, window.innerWidth < 640 ? 1.75 : 2);
-    renderer.setDrawingBufferSize(stageSize, stageSize, Math.min(deviceCap, ratioCeiling));
-  };
-  const resize = () => {
-    compact = window.innerWidth < 1000;
-    scrollDirty = true;
-    sizeBuffer();
-    if (!lost && !destroyed) draw();
-  };
-  const observer = new ResizeObserver(([entry]) => {
-    const next = Math.round(entry?.contentRect.width ?? 0);
-    if (next === stageSize) return;
-    stageSize = next;
-    resize();
+  // ---- lifecycle ----
+  const observer = new ResizeObserver(() => {
+    resizePending = true;
+    wake();
   });
-  observer.observe(stage);
-  const stopDensity = onDensityChange(resize);
+  observer.observe(field);
+  const stopDensity = onDensityChange(() => {
+    resizePending = true;
+    wake();
+  });
 
-  const handleLost = () => {
+  const handleLost = (event: Event) => {
+    event.preventDefault();
     lost = true;
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
-    lastTime = 0;
-    canvas.style.opacity = "0";
-    poster.style.visibility = "";
-    poster.style.opacity = "";
-    // Released now, while GL calls are no-ops: after a restore these handles are foreign.
     environment.dispose();
     onLost();
   };
-
-  const handleRestored = () => {
-    if (destroyed) return;
-    lost = false;
-    // The restored context has none of the old render targets, so the lighting is rebuilt.
-    environment = buildEnvironment(renderer);
-    scene.environment = environment.texture;
-    resize();
-    setPhase("live");
-    invalidate();
-  };
-
   canvas.addEventListener("webglcontextlost", handleLost);
-  canvas.addEventListener("webglcontextrestored", handleRestored);
-
-  const syncMotion = () => {
-    ambient = motion.ambient;
-    reduced = motion.reduced;
-    if (reduced) {
-      // Stable pose: anything in flight lands now, and a sweep underway finishes.
-      ambientGain = 0;
-      rate = 0;
-      if (sweepAge > 0) sweepAge = SWEEP;
-      snapToRest();
-      if (phase === "fade" || phase === "reveal") setPhase("live");
-    } else if (!ambient && tiltMode !== "drag") {
-      // A held drag stays on the pointer, and dragEnd sends it home.
-      target = { yaw: 0, pitch: 0 };
-      tiltMode = "leave";
-    }
-    scrollDirty = true;
-    invalidate();
-  };
 
   const release = () => {
     destroyed = true;
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
+    clearTimeout(fadeTimer);
     observer.disconnect();
     stopDensity();
     canvas.removeEventListener("webglcontextlost", handleLost);
-    canvas.removeEventListener("webglcontextrestored", handleRestored);
     ringGeometry.dispose();
-    bondGeometry.forEach(geometry => geometry.dispose());
+    bondGeometry.forEach((geometry) => geometry.dispose());
     bondMaterial.dispose();
     metal.dispose();
+    backdropGeometry.dispose();
+    lattice.dispose();
+    fluidTexture.dispose();
     shadowPlane.dispose();
     shadowMaterial.dispose();
     shadowTexture.dispose();
@@ -647,158 +841,122 @@ export async function createHeroScene(options: HeroSceneOptions): Promise<HeroSc
     renderer.forceContextLoss();
   };
 
-  // Sized, not drawn: a draw here would compile the shaders synchronously, ahead of this.
-  sizeBuffer();
+  const render = () => {
+    pose();
+    renderer.render(scene, camera);
+  };
+
+  // Compiled before the first visible frame, off the main thread where the browser can.
+  resize();
+  place(canvas.getBoundingClientRect());
   await renderer.compileAsync(scene, camera);
   await breathe();
-  draw();
+  render();
   if (shaderFailed || gl.isContextLost()) {
     release();
-    throw new Error("The mark's material did not compile.");
+    throw new Error("The hero's materials did not compile.");
   }
 
-  // Dev-only poster and test hooks. import.meta.env.DEV is false in a build, so these go.
-  const devHooks: Pick<HeroScene, "debug" | "capture" | "hold" | "place"> = import.meta.env.DEV
-    ? {
-        debug: () => ({
-          phase,
-          feedback: { rotation: feedback.rotation, target: feedback.target, circle: feedback.circle, done: feedback.done, status: feedback.status },
-          clock,
-          rate,
-          sweepAge,
-          tiltYaw: tiltYaw.x / DEG,
-          tiltPitch: tiltPitch.x / DEG,
-          bond: feedback.rotation,
-          bondTarget: feedback.target,
-          tip: tip.x / DEG,
-          lift: object.position.y,
-          envYaw: scene.environmentRotation.y,
-          ratioCeiling,
-          frameCost: lastCost,
-          renderCalls: renderer.info.render.frame,
-          running: frame !== 0,
-          calls: renderer.info.render.calls,
-          triangles: renderer.info.render.triangles,
-          shadowAlpha: shadowMaterial.opacity,
-          buffer: [canvas.width, canvas.height],
-        }),
-        hold() {
-          heldRatio = true;
-        },
-        place({ yaw = 0, pitch = 0, tipped = 0, sweep = SWEEP }) {
-          tiltYaw.x = target.yaw = yaw * DEG;
-          tiltPitch.x = target.pitch = pitch * DEG;
-          tip.x = tipTarget = tipped * DEG;
-          tiltYaw.v = tiltPitch.v = tip.v = 0;
-          sweepAge = sweep;
-          clock = 0;
-          tiltMode = "leave";
-          draw();
-        },
-        capture(size) {
-          heldRatio = true;
-          const held = phase;
-          phase = "live"; // the poster carries the shadow the first frame fades it in under
-          renderer.setDrawingBufferSize(size, size, 1);
-          draw();
-          const png = canvas.toDataURL("image/png");
-          phase = held;
-          return png;
-        },
-      }
-    : {};
-
   return {
-    ...devHooks,
-
-    reveal() {
-      if (phase !== "hold") return;
-      // Swap only after a complete frame exists. Two semi-transparent, differently lit
-      // copies of the mark used to overlap here and the moving poster snapped to rest.
-      phase = "live";
-      draw();
-      setPhase("live");
-      invalidate();
+    frame(dt) {
+      if (lost || destroyed) return;
+      const started = performance.now();
+      if (resizePending) resize();
+      if (!width || !height) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      place(canvasRect);
+      stir(canvasRect);
+      step(dt);
+      render();
+      timeFrame(started);
     },
-
-    setActive(next) {
-      if (active === next) return;
-      active = next;
-      lastTime = 0;
-      if (next) {
-        if (motion.ambient !== ambient) syncMotion();
-        scrollDirty = true;
-        schedule();
-      } else if (frame) {
-        cancelAnimationFrame(frame);
-        frame = 0;
-      }
+    get needsFrame() {
+      if (lost || destroyed) return false;
+      return (
+        resizePending ||
+        pointerMoved ||
+        !loadDone ||
+        sweepAge < SWEEP ||
+        ambient ||
+        rate > 0 ||
+        !fluid.idle ||
+        fluidDirty ||
+        !atRest(tiltYaw, target.yaw) ||
+        !atRest(tiltPitch, target.pitch) ||
+        !atRest(tip, tipTarget)
+      );
     },
-
-    hover(x, y) {
-      if (!ambient || tiltMode === "drag") return;
-      target = { yaw: x * HOVER_TILT, pitch: y * HOVER_TILT };
-      if (tiltMode !== "release") tiltMode = "hover";
-      schedule();
+    reveal(mode, shown) {
+      latticeMode = mode === "none" ? "none" : ambient ? "ripple" : "quiet";
+      loadDone = mode === "none";
+      loadAge = 0;
+      sweepAge = ambient ? 0 : SWEEP;
+      lattice.uniforms.uLoad!.value = loadDone ? 0 : 1;
+      lattice.uniforms.uRipple!.value = -RIPPLE_BAND * 2;
+      lattice.uniforms.uRipple2!.value = -RIPPLE_BAND * 2;
+      lattice.uniforms.uRippleCentre!.value.set(ringCentre.x, ringCentre.y);
+      farthest = Math.hypot(Math.max(ringCentre.x, width - ringCentre.x), Math.max(ringCentre.y, height - ringCentre.y));
+      render();
+      canvas.style.opacity = "1";
+      clearTimeout(fadeTimer);
+      fadeTimer = window.setTimeout(shown, FADE_MS);
+      wake();
     },
-
+    hover(clientX, clientY) {
+      pointer = { x: clientX, y: clientY, t: performance.now() };
+      pointerMoved = true;
+    },
     leave() {
-      if (tiltMode === "drag") return;
+      pointer = undefined;
+      last = undefined;
       target = { yaw: 0, pitch: 0 };
-      if (tiltMode !== "release") tiltMode = "leave";
-      schedule();
+      tiltMode = "leave";
+      wake();
     },
-
-    dragStart() {
-      if (reduced) return;
-      dragBase = { yaw: tiltYaw.x, pitch: tiltPitch.x };
-      tiltMode = "drag";
-      schedule();
+    motionChanged() {
+      ambient = motion.ambient;
+      if (!ambient) {
+        target = { yaw: 0, pitch: 0 };
+        tiltMode = "leave";
+        fluid.clear();
+        fluidDirty = true;
+        last = undefined;
+        if (!loadDone && latticeMode === "ripple") latticeMode = "quiet";
+      }
+      wake();
     },
-
-    drag(dx, dy) {
-      if (tiltMode !== "drag") return;
-      const within = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
-      target = {
-        yaw: within(dragBase.yaw + DRAG_TILT.yaw * Math.tanh(dx / DRAG_RANGE), DRAG_TILT.yaw),
-        pitch: within(dragBase.pitch + DRAG_TILT.pitch * Math.tanh(dy / DRAG_RANGE), DRAG_TILT.pitch),
-      };
-      schedule();
-    },
-
-    dragEnd() {
-      if (tiltMode !== "drag") return;
-      target = { yaw: 0, pitch: 0 };
-      tiltMode = "release";
-      releaseAge = 0;
-      for (const axis of [tiltYaw, tiltPitch]) axis.v = Math.max(-RELEASE_SPEED, Math.min(RELEASE_SPEED, axis.v));
-      schedule();
-    },
-
-    turn(direction = 1) {
-      feedback.hop(direction);
-      if (!ambient) feedback.update(0, false);
-      invalidate();
-    },
-
-    setWorking(next) {
-      feedback.setWorking(next);
-      invalidate();
-    },
-
-    settle() {
-      feedback.finish();
-      if (!ambient) feedback.update(0, false);
-      invalidate();
-    },
-
-    scrolled() {
-      if (!ambient) return;
-      scrollDirty = true;
-    },
-
-    motionChanged: syncMotion,
-
     destroy: release,
+    ...(import.meta.env.DEV
+      ? {
+          scrub(age: number) {
+            loadHeld = age >= 0;
+            if (!loadHeld) return;
+            latticeMode = "ripple";
+            loadDone = false;
+            loadAge = age;
+            const canvasRect = canvas.getBoundingClientRect();
+            place(canvasRect);
+            farthest = Math.hypot(Math.max(ringCentre.x, width - ringCentre.x), Math.max(ringCentre.y, height - ringCentre.y));
+            step(0);
+            render();
+          },
+        }
+      : {}),
+    debug: () => ({
+      size: [width, height],
+      buffer: [canvas.width, canvas.height],
+      ratio: Math.min(deviceCap, ratioCeiling),
+      frameCost: lastCost,
+      ring: { ...ringCentre, radius: ringRadius },
+      lattice: {
+        mode: latticeMode,
+        done: loadDone,
+        age: loadAge,
+        waves: [lattice.uniforms.uRipple!.value, lattice.uniforms.uRipple2!.value],
+      },
+      fluid: { idle: fluid.idle, dye: fluid.maxDye, speed: fluid.speed },
+      feedback: { rotation: feedback.rotation, done: feedback.done, status: feedback.status },
+      calls: renderer.info.render.calls,
+    }),
   };
 }
